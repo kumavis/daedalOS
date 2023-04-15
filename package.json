@@ -45,6 +45,7 @@
     "styled-components": "^5"
   },
   "dependencies": {
+    "@endo/compartment-mapper": "^0.7.13",
     "@monaco-editor/react": "^4.4.6",
     "@panzoom/panzoom": "^4.5.1",
     "@prettier/plugin-xml": "^2.2.0",
@@ -72,6 +73,7 @@
     "react-dom": "^18.2.0",
     "react-rnd": "^10.3.7",
     "resedit": "^1.6.0",
+    "ses": "^0.15.23",
     "styled-components": "^5.3.6",
     "utif": "https://github.com/photopea/UTIF.js"
   },

@@ -1,0 +1,8 @@
+{
+    "directoryEntry": {
+        "title": "Calculator",
+        "icon": "/System/Icons/emulator.webp"
+    },
+    "source": "virtualImport('Applications/Calculator/bundle.mjs')",
+    "extensions": [".calc"]
+}

@@ -6,6 +6,7 @@ import StyledLoading from "components/system/Files/FileManager/StyledLoading";
 import { useFileSystem } from "contexts/fileSystem";
 import { useProcesses } from "contexts/process";
 import directory from "contexts/process/directory";
+import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 
 const AppInstaller: FC<ComponentProcessProps> = ({ id }) => {
@@ -55,10 +56,6 @@ const AppInstaller: FC<ComponentProcessProps> = ({ id }) => {
 
 export default AppInstaller;
 
-// consider creating a fsImport that imports from local fs
-//   const code = 'export const foo = 123'
-//   const imported = await import(`data:text/javascript;charset=utf-8,${encodeURIComponent(code)}`)
-//   console.log(imported.foo) // Should print 123
 export function installApplication(appDescriptor: Record<string, any>) {
   const {
     directoryEntry,
@@ -70,7 +67,7 @@ export function installApplication(appDescriptor: Record<string, any>) {
   if (appTitle in directory) {
     throw new Error(`Application "${appTitle}" already installed`);
   }
-  const component = eval(source);
+  const component = dynamic(eval(source));
   directory[appTitle] = {
     ...directoryEntry,
     Component: component,

@@ -20,16 +20,52 @@ const AppsLoader: FC = () => {
 
   useEffect(() => {
     if (!fs) return;
-    console.log(fs);
     // run once
     if (appsInitialized.current) return;
     appsInitialized.current = true;
+
+    // set up virtualImport
+    // imports from local fs
+    globalThis.virtualImport = async (url: string) => {
+      // dynamic import to ensure ses is available
+      const { importLocation } = await import("@endo/compartment-mapper");
+      // const buffer = await readFile(url);
+      // const code = buffer.toString();
+      // const importDataUri = `data:text/javascript;charset=utf-8,${encodeURIComponent(code)}`
+      // const imported = await eval(`import('${importDataUri}')`)
+      // const imported = await eval(code)
+      // console.log('virtualImport', url, imported)
+
+      const read = async (location: string) => {
+        try {
+          const result = await readFile(new URL(location).pathname);
+          console.log('read', new URL(location).pathname)
+          return result
+        } catch (e) {
+          console.log('read (fail)', new URL(location).pathname)
+          throw e
+        }
+      }
+
+      debugger
+      const { namespace } = await importLocation(
+        read,
+        `file://x/${url}`,
+        {
+          globals: { ...globalThis, Math, Intl },
+          modules: {},
+        }
+      );
+      console.log('namespace', namespace)
+
+      return namespace.default;
+    }
+
     // initialize apps
-    console.log("files");
     (async function () {
       // find application directories
       const files = await readdir("/Applications");
-      const applicationDirs = [];
+      const applicationDirs: Array<string> = [];
       await Promise.all(
         files.map(async (file) => {
           const path = `/Applications/${file}`;
@@ -37,7 +73,6 @@ const AppsLoader: FC = () => {
           if (details.isDirectory()) {
             applicationDirs.push(path);
           }
-          console.log(details);
         })
       );
       // install each application

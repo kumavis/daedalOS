@@ -36,7 +36,9 @@ class MyDocument extends Document {
   public render(): JSX.Element {
     return (
       <Html lang={DEFAULT_LOCALE}>
-        <Head />
+        <Head>
+          <script src="/ses.umd.js" />
+        </Head>
         <body>
           <Main />
           <NextScript />

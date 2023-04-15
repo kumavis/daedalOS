@@ -60,6 +60,6 @@ const nextConfig = {
 
 module.exports = bundleAnalyzer
   ? require("@next/bundle-analyzer")({
-      enabled: isProduction,
-    })(nextConfig)
+    enabled: isProduction,
+  })(nextConfig)
   : nextConfig;
