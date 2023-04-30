@@ -46,8 +46,3 @@ export const unlockGlobal = (key: string): void => {
 
   setGlobalLock(key, false);
 };
-
-declare module "*.raw" {
-  const content: string;
-  export default content;
-}

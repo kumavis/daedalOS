@@ -50,8 +50,8 @@ const nextConfig = {
       })
     );
     config.module.rules.push({
-      test: /\.raw$/,
-      use: 'raw-loader',
+      test: /\.js\.raw$/,
+      type: 'asset/source'
     });
 
     return config;

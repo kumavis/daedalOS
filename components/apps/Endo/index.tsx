@@ -6,6 +6,8 @@ import { useZip } from "hooks/useFile";
 import type { MessageEventHandler } from "hooks/usePostMessage";
 import type { FC } from "react";
 import { useCallback } from "react";
+/* eslint-disable-next-line @typescript-eslint/ban-ts-comment */
+// @ts-ignore
 import endoRuntime from "./runtime.js.raw";
 
 const { runtime: defaultRuntime } = defaultRuntimeConfig;
@@ -70,10 +72,10 @@ const Browser: FC<ComponentProcessProps> = (props) => {
     [unzippedFiles]
   );
 
-  /* eslint-disable-next-line unicorn/no-useless-undefined */
-  if (!url) return undefined;
-  /* eslint-disable-next-line unicorn/no-useless-undefined */
-  if (!compartmentMap) return undefined;
+  /* eslint-disable-next-line unicorn/no-null */
+  if (!url) return null;
+  /* eslint-disable-next-line unicorn/no-null */
+  if (!compartmentMap) return null;
 
   const runtimeConfig: RuntimeConfig = {
     libs,
