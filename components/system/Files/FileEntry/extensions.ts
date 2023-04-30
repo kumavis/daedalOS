@@ -31,6 +31,11 @@ const types = {
     process: ["Emulator"],
     type: "Game ROM File",
   },
+  Endo: {
+    icon: "emulator",
+    process: ["Endo"],
+    type: "Endo Sandboxed App",
+  },
   Font: {
     icon: "font",
     process: ["OpenType"],
@@ -113,6 +118,7 @@ const types = {
 };
 
 const extensions: Record<string, Extension> = {
+  ".agar": types.Endo,
   ".asx": types.AudioPlaylist,
   ".bin": types.DiscImage,
   ".eval": types.NoodJs,
