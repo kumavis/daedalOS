@@ -30,7 +30,6 @@ const textDecoder = new TextDecoder();
 const Browser: FC<ComponentProcessProps> = (props) => {
   const libs = ["https://npmfs.com/download/ses/0.18.4/dist/ses.cjs"];
   const runtime = `
-    ${defaultRuntime}
     // lockdown()
     ${endoRuntime as string}
   `;
@@ -99,11 +98,12 @@ const Browser: FC<ComponentProcessProps> = (props) => {
         };
 
         const compartmentMap = ${compartmentMap};
+
+        // workaround for default webpack environment
+        globalThis.process = { env: {} }
         
         const lookupModule = async (location) => {
-          console.log('inside lookupModule:', location)
           const { result } = await send({ type: 'lookupModule', params: { location } })
-          console.log('inside lookupModule result:', result)
           return result
         }
         const archiveLocation = '(archive location)'
