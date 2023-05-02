@@ -14,6 +14,7 @@ export const useFile = (path: string): [Buffer | undefined, any] => {
     if (!path) return undefined;
     return readFile(path);
   }, [path, readFile]);
+
   return [fileContent, error];
 };
 
