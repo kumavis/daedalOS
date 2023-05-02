@@ -6,6 +6,7 @@ export const useAsync = <T>(
   dependencies: DependencyList
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 ): [T | undefined, any | undefined] => {
+  /* eslint-disable-next-line react-hooks/exhaustive-deps */
   const memoizedAsync = useCallback(asyncFn, dependencies);
   const [value, setValue] = useState<T>();
   /* eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */

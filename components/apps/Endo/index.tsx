@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from "components/apps/NoodJs";
-import Noodjs, { defaultRuntimeConfig } from "components/apps/NoodJs";
+import Noodjs from "components/apps/NoodJs";
 import type { ComponentProcessProps } from "components/system/Apps/RenderComponent";
 import { useProcesses } from "contexts/process";
 import { useZip } from "hooks/useFile";
@@ -9,8 +9,6 @@ import { useCallback } from "react";
 /* eslint-disable-next-line @typescript-eslint/ban-ts-comment */
 // @ts-ignore
 import endoRuntime from "./runtime.js.raw";
-
-const { runtime: defaultRuntime } = defaultRuntimeConfig;
 
 type RpcMessage = {
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
