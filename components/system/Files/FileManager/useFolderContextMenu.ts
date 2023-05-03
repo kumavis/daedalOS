@@ -26,7 +26,7 @@ import {
   bufferToBlob,
   generatePrettyTimestamp,
   isFirefox,
-  isSafari
+  isSafari,
 } from "utils/functions";
 
 const stopGlobalMusicVisualization = (): void =>
@@ -226,14 +226,15 @@ const useFolderContextMenu = (
         };
         const MAP_IPFS_DIRECTORY = {
           action: () => {
-            return mountIpfs(url, window.prompt('Enter IPFS CID:'))
+            return mountIpfs(url, { cidPath: window.prompt("Enter IPFS CID:") })
               .then((mappedFolder) => {
                 updateFolder(url, mappedFolder);
                 open("FileExplorer", { url: join(url, mappedFolder) });
               })
               .catch(() => {
                 // Ignore failure to map
-              })},
+              });
+          },
           label: "Mount IPFS directory",
         };
         const FS_COMMANDS = [
@@ -385,6 +386,7 @@ const useFolderContextMenu = (
       isAscending,
       isDesktop,
       mapFs,
+      mountIpfs,
       newPath,
       open,
       pasteList,

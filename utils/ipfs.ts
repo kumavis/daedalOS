@@ -1,5 +1,5 @@
-import HTTPRequest from "browserfs/dist/node/backend/HTTPRequest";
-import { BFSCallback } from "browserfs/dist/node/core/file_system";
+import type HTTPRequest from "browserfs/dist/node/backend/HTTPRequest";
+import type { BFSCallback } from "browserfs/dist/node/core/file_system";
 import * as BrowserFS from "public/System/BrowserFS/browserfs.min.js";
 import {
   HIGH_PRIORITY_REQUEST,
@@ -49,19 +49,18 @@ const isIpfsGatewayAvailable = (gatewayUrl: string): Promise<boolean> =>
 
 // found inconsistent results parsing ipfs:// urls with URL constructor across platforms
 export const parseIpfsUrl = (ipfsUrl: string) => {
-  const regex = /^([^:]+:)(?:\/\/)([^?]*)(\?.*)?$/;
+  const regex = /^([^:]+:)\/\/([^?]*)(\?.*)?$/;
   const match = ipfsUrl.match(regex);
 
   if (match) {
     return {
-      protocol: match[1],
       pathname: match[2],
-      search: match[3] || ''
+      protocol: match[1],
+      search: match[3] || "",
     };
-  } else {
-    throw new Error(`Failed to parse IPFS url: "${ipfsUrl}"`);
   }
-}
+  throw new Error(`Failed to parse IPFS url: "${ipfsUrl}"`);
+};
 
 export const getIpfsGatewayUrl = async (
   ipfsUrl: string,
@@ -156,36 +155,40 @@ const buildIpfsIndex = async (ipfsCid) => {
   }
 
   return index;
-}
-
+};
 
 export class IPFSGatewayFS extends HTTPRequestFS {
-  public static readonly Name = 'IPFSGatewayFS';
+  public static readonly Name = "IPFSGatewayFS";
+
   public static readonly Options: FileSystemOptions = {
-		ipfsCid: {
-			type: 'string',
-			description: 'Used as the URL prefix for fetched files. Default: Fetch files relative to the index.',
-		},
-	};
+    cidPath: {
+      description:
+        "Used as the URL prefix for fetched files. Default: Fetch files relative to the index.",
+      type: "string",
+    },
+  };
 
   /**
-	 * Construct an HTTPRequest file system backend with the given options.
-	 */
-	public static Create(opts: FileSystemOptions, cb: BFSCallback<HTTPRequest>): void {
-    (async function(){
-      const { ipfsCid } = opts;
-      const gatewayUrl = await getIpfsGatewayUrl(`ipfs://${ipfsCid}`)
-      const index = await buildIpfsIndex(ipfsCid);
+   * Construct an HTTPRequest file system backend with the given options.
+   */
+  public static Create(
+    opts: FileSystemOptions,
+    cb: BFSCallback<HTTPRequest>
+  ): void {
+    (async function () {
+      const { cidPath } = opts;
+      const gatewayUrl = await getIpfsGatewayUrl(`ipfs://${cidPath}`);
+      const index = await buildIpfsIndex(cidPath);
       return {
-        index,
         baseUrl: gatewayUrl,
-      }
+        index,
+      };
     })()
-    .then((config) => {
-      super.Create(config, cb);
-    })
-    .catch((error) => {
-      cb(error);
-    });
-	}
+      .then((config) => {
+        super.Create(config, cb);
+      })
+      .catch((error) => {
+        cb(error);
+      });
+  }
 }

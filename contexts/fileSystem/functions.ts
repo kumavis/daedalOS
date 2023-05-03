@@ -5,7 +5,11 @@ import type { RootFileSystem } from "contexts/fileSystem/useAsyncFs";
 import { openDB } from "idb";
 import { join } from "path";
 import index from "public/.index/fs.9p.json";
-import { FS_HANDLES, ONE_TIME_PASSIVE_EVENT } from "utils/constants";
+import {
+  FS_HANDLES,
+  IPFS_MOUNTS,
+  ONE_TIME_PASSIVE_EVENT,
+} from "utils/constants";
 
 type BFSFS = { [key: string]: BFSFS | null };
 type FS9PV3 = [
@@ -235,6 +239,12 @@ export const requestPermission = async (
 
   return false;
 };
+
+export type IpfsMountConfig = {
+  cidPath: string;
+};
+export const IpfsMountsDb =
+  makeDbObjCrudInterface<IpfsMountConfig>(IPFS_MOUNTS);
 
 export const resetStorage = (rootFs?: RootFileSystem): Promise<void> =>
   new Promise((resolve, reject) => {

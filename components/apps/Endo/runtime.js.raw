@@ -1,4 +1,6 @@
-  // START BUNDLE RUNTIME ================================
+if (!globalThis.Compartment) return
+
+// START BUNDLE RUNTIME ================================
   const { loadApplication } = (function(){
   'use strict';
 return (() => {
