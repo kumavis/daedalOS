@@ -24,8 +24,6 @@ type FS9P = {
   version: 3;
 };
 
-type FileSystemHandles = Record<string, FileSystemDirectoryHandle>;
-
 const KEYVAL_STORE_NAME = "keyval";
 const KEYVAL_DB = `${KEYVAL_STORE_NAME}-store`;
 
@@ -145,59 +143,77 @@ export const supportsIndexedDB = (): Promise<boolean> =>
     );
   });
 
-const getKeyValStore = (): ReturnType<typeof openDB> =>
-  openDB(KEYVAL_DB, 1, {
+const getKeyValStore = (): ReturnType<typeof openDB> => {
+  return openDB(KEYVAL_DB, 1, {
     upgrade: (db) => db.createObjectStore(KEYVAL_STORE_NAME),
   });
-
-export const getFileSystemHandles = async (): Promise<FileSystemHandles> => {
-  if (!(await supportsIndexedDB())) {
-    return Object.create(null) as FileSystemHandles;
-  }
-
-  const db = await getKeyValStore();
-
-  return (
-    (await (<Promise<FileSystemHandles>>(
-      db.get(KEYVAL_STORE_NAME, FS_HANDLES)
-    ))) || (Object.create(null) as FileSystemHandles)
-  );
 };
 
-export const addFileSystemHandle = async (
+type DbObjCrudInterface<T> = {
+  add: (key: string, value: T) => Promise<void>;
+  get: () => Promise<Record<string, T>>;
+  remove: (key: string) => Promise<void>;
+};
+const makeDbObjCrudInterface = <T>(subkey: string): DbObjCrudInterface<T> => {
+  type Collection = Record<string, T>;
+  return {
+    async add(key: string, value: T): Promise<void> {
+      if (!(await supportsIndexedDB())) return;
+
+      const db = await getKeyValStore();
+
+      try {
+        db.put(
+          KEYVAL_STORE_NAME,
+          {
+            ...(await this.get()),
+            [key]: value,
+          },
+          subkey
+        );
+      } catch (error) {
+        // Ignore errors storing value
+        console.error(error);
+      }
+    },
+
+    async get(): Promise<Collection> {
+      if (!(await supportsIndexedDB())) {
+        return Object.create(null) as Collection;
+      }
+
+      const db = await getKeyValStore();
+
+      return (
+        (await (<Promise<Collection>>db.get(KEYVAL_STORE_NAME, subkey))) ||
+        (Object.create(null) as Collection)
+      );
+    },
+
+    async remove(key: string): Promise<void> {
+      if (!(await supportsIndexedDB())) return;
+
+      const { [key]: _removedEntry, ...entries } = await this.get();
+      const db = await getKeyValStore();
+
+      await db.put(KEYVAL_STORE_NAME, entries, subkey);
+    },
+  };
+};
+
+type FileSystemHandles = Record<string, FileSystemDirectoryHandle>;
+const fsHandlesDbInterface =
+  makeDbObjCrudInterface<FileSystemDirectoryHandle>(FS_HANDLES);
+export const getFileSystemHandles = (): Promise<FileSystemHandles> =>
+  fsHandlesDbInterface.get();
+export const addFileSystemHandle = (
   directory: string,
   handle: FileSystemDirectoryHandle,
   mappedName: string
-): Promise<void> => {
-  if (!(await supportsIndexedDB())) return;
-
-  const db = await getKeyValStore();
-
-  try {
-    db.put(
-      KEYVAL_STORE_NAME,
-      {
-        ...(await getFileSystemHandles()),
-        [join(directory, mappedName)]: handle,
-      },
-      FS_HANDLES
-    );
-  } catch {
-    // Ignore errors storing handle
-  }
-};
-
-export const removeFileSystemHandle = async (
-  directory: string
-): Promise<void> => {
-  if (!(await supportsIndexedDB())) return;
-
-  const { [directory]: _removedHandle, ...handles } =
-    await getFileSystemHandles();
-  const db = await getKeyValStore();
-
-  await db.put(KEYVAL_STORE_NAME, handles, FS_HANDLES);
-};
+): Promise<void> =>
+  fsHandlesDbInterface.add(join(directory, mappedName), handle);
+export const removeFileSystemHandle = (directory: string): Promise<void> =>
+  fsHandlesDbInterface.remove(directory);
 
 export const requestPermission = async (
   url: string
