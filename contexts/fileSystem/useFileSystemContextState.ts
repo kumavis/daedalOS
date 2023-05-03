@@ -34,6 +34,7 @@ import {
   TRANSITIONS_IN_MILLISECONDS,
 } from "utils/constants";
 import { bufferToBlob, getExtension } from "utils/functions";
+import { IPFSGatewayFS } from "utils/ipfs";
 
 type FilePasteOperations = Record<string, "copy" | "move">;
 
@@ -70,6 +71,10 @@ type FileSystemContextState = AsyncFS & {
     directory: string,
     existingHandle?: FileSystemDirectoryHandle
   ) => Promise<string>;
+  mountIpfs: (
+    directory: string,
+    existingHandle?: FileSystemDirectoryHandle
+  ) => Promise<string>;
   mkdirRecursive: (path: string) => Promise<void>;
   mountFs: (url: string) => Promise<void>;
   moveEntries: (entries: string[]) => void;
@@ -84,7 +89,7 @@ type FileSystemContextState = AsyncFS & {
 const SYSTEM_DIRECTORIES = new Set(["/OPFS"]);
 
 const {
-  FileSystem: { FileSystemAccess, IsoFS, ZipFS },
+  FileSystem: { FileSystemAccess, IsoFS, ZipFS, HTTPRequest: HTTPRequestFS },
 } = BrowserFS as IFileSystemAccess & typeof IBrowserFS;
 
 const useFileSystemContextState = (): FileSystemContextState => {
@@ -216,6 +221,24 @@ const useFileSystemContextState = (): FileSystemContextState => {
         updateFiles(newFile, oldFile)
       ),
     []
+  );
+  const mountIpfs = useCallback(
+    async (directory: string, ipfsCid: string): Promise<string> => {
+      console.log("Mounting IPFS CID", ipfsCid, directory)
+      const ipfsUrl = `ipfs://${ipfsCid}`;
+      return new Promise((resolve, reject) => {
+        IPFSGatewayFS?.Create({ ipfsCid: ipfsCid }, (error, newFs) => {
+          if (error || !newFs) {
+            reject();
+            return;
+          }
+          const mappedName = removeInvalidFilenameCharacters(ipfsCid).trim();
+          rootFs?.mount?.(join(directory, mappedName), newFs);
+          resolve(mappedName);
+        });
+      });
+    },
+    [rootFs]
   );
   const mapFs = useCallback(
     async (
@@ -473,6 +496,7 @@ const useFileSystemContextState = (): FileSystemContextState => {
     createPath,
     deletePath,
     mapFs,
+    mountIpfs,
     mkdirRecursive,
     mountFs,
     moveEntries,
