@@ -1,6 +1,9 @@
-import type HTTPRequest from "browserfs/dist/node/backend/HTTPRequest";
+import HTTPRequest, { HTTPRequestOptions } from "browserfs/dist/node/backend/HTTPRequest";
 import type { BFSCallback } from "browserfs/dist/node/core/file_system";
-import * as BrowserFS from "public/System/BrowserFS/browserfs.min.js";
+
+// import * as BrowserFS from "public/System/BrowserFS/browserfs.min.js";
+import * as BrowserFS from "browserfs";
+
 import {
   HIGH_PRIORITY_REQUEST,
   IPFS_GATEWAY_URLS,
@@ -141,11 +144,19 @@ export const getIpfsResource = async (ipfsUrl: string): Promise<Buffer> => {
     : Buffer.from("");
 };
 
-const buildIpfsIndex = async (ipfsCid) => {
+type IpfsLsResponse = {
+  Objects: {
+    Links: {
+      Name: string;
+    }[];
+  }[];
+}
+
+const buildIpfsIndex = async (ipfsCid: string) => {
   const url = `https://dweb.link/api/v0/ls?arg=${ipfsCid}`;
   const response = await fetch(url);
-  const data = await response.json();
-  const index = {};
+  const data = await response.json() as IpfsLsResponse;
+  const index = {} as Record<string, null>;
   // this seems to be sufficient info for a single folder
   // nested folders may need more work
   for (const object of data.Objects) {
@@ -171,24 +182,26 @@ export class IPFSGatewayFS extends HTTPRequestFS {
   /**
    * Construct an HTTPRequest file system backend with the given options.
    */
+
   public static Create(
     opts: FileSystemOptions,
     cb: BFSCallback<HTTPRequest>
   ): void {
-    (async function () {
+    (async function (): Promise<HTTPRequestOptions> {
       const { cidPath } = opts;
       const gatewayUrl = await getIpfsGatewayUrl(`ipfs://${cidPath}`);
       const index = await buildIpfsIndex(cidPath);
-      return {
+      const config = {
         baseUrl: gatewayUrl,
         index,
       };
+      return config;
     })()
-      .then((config) => {
-        super.Create(config, cb);
-      })
-      .catch((error) => {
-        cb(error);
-      });
+    .then((config) => {
+      HTTPRequest.Create(config, cb);
+    })
+    .catch((error) => {
+      cb(error);
+    });
   }
 }
