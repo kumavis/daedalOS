@@ -87,6 +87,7 @@ type FileEntryProps = {
   stats: FileStat;
   useNewFolderIcon?: boolean;
   view: FileManagerViewNames;
+  iconOverride?: string;
 };
 
 const truncateName = (
@@ -134,14 +135,16 @@ const FileEntry: FC<FileEntryProps> = ({
   stats,
   useNewFolderIcon,
   view,
+  iconOverride,
 }) => {
   const { blurEntry, focusEntry } = focusFunctions;
   const { url: changeUrl } = useProcesses();
-  const [{ comment, getIcon, icon, pid, subIcons, url }, setInfo] = useFileInfo(
+  const [{ comment, getIcon, icon: fileIcon, pid, subIcons, url }, setInfo] = useFileInfo(
     path,
     stats.isDirectory(),
     useNewFolderIcon
   );
+  const icon = iconOverride || fileIcon;
   const openFile = useFile(url);
   const {
     createPath,
