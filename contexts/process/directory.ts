@@ -108,6 +108,12 @@ const directory: Processes = {
     icon: FOLDER_ICON,
     title: "File Explorer",
   },
+  OldMacFileExplorer: {
+    Component: dynamic(() => import("components/apps/OldMacFileExplorer")),
+    icon: FOLDER_ICON,
+    title: "Old Mac File Explorer",
+    hasWindow: false,
+  },
   IRC: {
     Component: dynamic(() => import("components/apps/IRC")),
     backgroundColor: "#FFF",
