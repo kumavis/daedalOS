@@ -31,7 +31,8 @@ const StyledLoading = dynamic(
   () => import("components/system/Files/FileManager/StyledLoading")
 );
 
-const macIcon = "https://www.hypertalking.com/wp-content/themes/hypertalking/images/icon-folder.png";
+const macIcon =
+  "https://www.hypertalking.com/wp-content/themes/hypertalking/images/icon-folder.png";
 
 type FileManagerProps = {
   allowMovingDraggableEntries?: boolean;
@@ -85,8 +86,8 @@ const FileManager: FC<FileManagerProps> = ({
       skipSorting,
     });
   const { mountFs, rootFs, stat } = useFileSystem();
-  
-  const StyledFileEntry =  StyledIconFileEntry
+
+  const StyledFileEntry = StyledIconFileEntry;
   const StyledFileManager = StyledIconFileManager;
 
   const { isSelecting, selectionRect, selectionStyling, selectionEvents } =
@@ -197,7 +198,7 @@ const FileManager: FC<FileManagerProps> = ({
           {...(!readOnly && {
             $selecting: isSelecting,
             ...fileDrop,
-            // ...folderContextMenu,
+            ...folderContextMenu,
             ...selectionEvents,
           })}
           {...FOCUSABLE_ELEMENT}
@@ -219,6 +220,7 @@ const FileManager: FC<FileManagerProps> = ({
                 focusFunctions={focusFunctions}
                 focusedEntries={focusedEntries}
                 hideShortcutIcon={hideShortcutIcons}
+                iconOverride={macIcon}
                 isLoadingFileManager={isLoading}
                 loadIconImmediately={loadIconsImmediately}
                 name={basename(file, SHORTCUT_EXTENSION)}
@@ -230,7 +232,6 @@ const FileManager: FC<FileManagerProps> = ({
                 stats={files[file]}
                 useNewFolderIcon={useNewFolderIcon}
                 view={view}
-                iconOverride={macIcon}
               />
             </StyledFileEntry>
           ))}
