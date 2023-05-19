@@ -54,6 +54,8 @@ export const FOCUSABLE_ELEMENT = { tabIndex: -1 };
 
 export const FS_HANDLES = "FileSystemAccessHandles";
 
+export const IPFS_MOUNTS = "IPFSMounts";
+
 export const HOME = "/Users/Public";
 
 export const PICTURES_FOLDER = `${HOME}/Pictures`;

@@ -1,9 +1,20 @@
+import HTTPRequest, { HTTPRequestOptions } from "browserfs/dist/node/backend/HTTPRequest";
+import type { BFSCallback } from "browserfs/dist/node/core/file_system";
+
+// import * as BrowserFS from "public/System/BrowserFS/browserfs.min.js";
+import * as BrowserFS from "browserfs";
+
 import {
   HIGH_PRIORITY_REQUEST,
   IPFS_GATEWAY_URLS,
   MILLISECONDS_IN_SECOND,
   ONE_TIME_PASSIVE_EVENT,
 } from "utils/constants";
+
+const {
+  FileSystem: { HTTPRequest: HTTPRequestFS },
+} = BrowserFS;
+type FileSystemOptions = typeof HTTPRequestFS.prototype.options;
 
 let IPFS_GATEWAY_URL = "";
 
@@ -39,6 +50,21 @@ const isIpfsGatewayAvailable = (gatewayUrl: string): Promise<boolean> =>
     )}?now=${Date.now()}&filename=1x1.png#x-ipfs-companion-no-redirect`;
   });
 
+// found inconsistent results parsing ipfs:// urls with URL constructor across platforms
+export const parseIpfsUrl = (ipfsUrl: string) => {
+  const regex = /^([^:]+:)\/\/([^?]*)(\?.*)?$/;
+  const match = ipfsUrl.match(regex);
+
+  if (match) {
+    return {
+      pathname: match[2],
+      protocol: match[1],
+      search: match[3] || "",
+    };
+  }
+  throw new Error(`Failed to parse IPFS url: "${ipfsUrl}"`);
+};
+
 export const getIpfsGatewayUrl = async (
   ipfsUrl: string,
   notCurrent?: boolean
@@ -59,7 +85,7 @@ export const getIpfsGatewayUrl = async (
     if (!IPFS_GATEWAY_URL) return "";
   }
 
-  const { pathname, protocol, search } = new URL(ipfsUrl);
+  const { pathname, protocol, search } = parseIpfsUrl(ipfsUrl);
 
   if (protocol !== "ipfs:") return "";
 
@@ -117,3 +143,65 @@ export const getIpfsResource = async (ipfsUrl: string): Promise<Buffer> => {
     ? Buffer.from(await response.arrayBuffer())
     : Buffer.from("");
 };
+
+type IpfsLsResponse = {
+  Objects: {
+    Links: {
+      Name: string;
+    }[];
+  }[];
+}
+
+const buildIpfsIndex = async (ipfsCid: string) => {
+  const url = `https://dweb.link/api/v0/ls?arg=${ipfsCid}`;
+  const response = await fetch(url);
+  const data = await response.json() as IpfsLsResponse;
+  const index = {} as Record<string, null>;
+  // this seems to be sufficient info for a single folder
+  // nested folders may need more work
+  for (const object of data.Objects) {
+    for (const link of object.Links) {
+      index[link.Name] = null;
+    }
+  }
+
+  return index;
+};
+
+export class IPFSGatewayFS extends HTTPRequestFS {
+  public static readonly Name = "IPFSGatewayFS";
+
+  public static readonly Options: FileSystemOptions = {
+    cidPath: {
+      description:
+        "Used as the URL prefix for fetched files. Default: Fetch files relative to the index.",
+      type: "string",
+    },
+  };
+
+  /**
+   * Construct an HTTPRequest file system backend with the given options.
+   */
+
+  public static Create(
+    opts: FileSystemOptions,
+    cb: BFSCallback<HTTPRequest>
+  ): void {
+    (async function (): Promise<HTTPRequestOptions> {
+      const { cidPath } = opts;
+      const gatewayUrl = await getIpfsGatewayUrl(`ipfs://${cidPath}`);
+      const index = await buildIpfsIndex(cidPath);
+      const config = {
+        baseUrl: gatewayUrl,
+        index,
+      };
+      return config;
+    })()
+    .then((config) => {
+      HTTPRequest.Create(config, cb);
+    })
+    .catch((error) => {
+      cb(error);
+    });
+  }
+}

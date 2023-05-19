@@ -15,9 +15,12 @@ import {
   iterateFileName,
   removeInvalidFilenameCharacters,
 } from "components/system/Files/FileManager/functions";
+
+import type { IpfsMountConfig } from "contexts/fileSystem/functions";
 import {
   addFileSystemHandle,
   getFileSystemHandles,
+  IpfsMountsDb,
   removeFileSystemHandle,
 } from "contexts/fileSystem/functions";
 import type { AsyncFS, RootFileSystem } from "contexts/fileSystem/useAsyncFs";
@@ -34,6 +37,7 @@ import {
   TRANSITIONS_IN_MILLISECONDS,
 } from "utils/constants";
 import { bufferToBlob, getExtension } from "utils/functions";
+import { IPFSGatewayFS } from "utils/ipfs";
 
 type FilePasteOperations = Record<string, "copy" | "move">;
 
@@ -70,6 +74,10 @@ type FileSystemContextState = AsyncFS & {
     directory: string,
     existingHandle?: FileSystemDirectoryHandle
   ) => Promise<string>;
+  mountIpfs: (
+    directory: string,
+    mountConfig: IpfsMountConfig,
+  ) => Promise<string>;
   mkdirRecursive: (path: string) => Promise<void>;
   mountFs: (url: string) => Promise<void>;
   moveEntries: (entries: string[]) => void;
@@ -84,7 +92,7 @@ type FileSystemContextState = AsyncFS & {
 const SYSTEM_DIRECTORIES = new Set(["/OPFS"]);
 
 const {
-  FileSystem: { FileSystemAccess, IsoFS, ZipFS },
+  FileSystem: { FileSystemAccess, IsoFS, ZipFS, HTTPRequest: HTTPRequestFS },
 } = BrowserFS as IFileSystemAccess & typeof IBrowserFS;
 
 const useFileSystemContextState = (): FileSystemContextState => {
@@ -216,6 +224,27 @@ const useFileSystemContextState = (): FileSystemContextState => {
         updateFiles(newFile, oldFile)
       ),
     []
+  );
+  const mountIpfs = useCallback(
+    async (directory: string, mountConfig: IpfsMountConfig): Promise<string> => {
+      const { cidPath } = mountConfig;
+      console.log("Mounting IPFS CID", cidPath, directory)
+      const newFs = await new Promise<IPFSGatewayFS>((resolve, reject) => {
+        IPFSGatewayFS?.Create({ cidPath: cidPath }, (error, newFs) => {
+          if (error || !newFs) {
+            reject(error || new Error("Failed to mount IPFS CID"));
+            return;
+          }
+          resolve(newFs);
+        });
+      });
+      const mappedName = removeInvalidFilenameCharacters(cidPath).trim();
+      const mountPath = join(directory, mappedName);
+      rootFs?.mount?.(mountPath, newFs);
+      await IpfsMountsDb.add(mountPath, { cidPath });
+      return mappedName;
+    },
+    [rootFs]
   );
   const mapFs = useCallback(
     async (
@@ -439,6 +468,7 @@ const useFileSystemContextState = (): FileSystemContextState => {
   );
   const restoredFsHandles = useRef(false);
 
+  // restore persisted file system mount points
   useEffect(() => {
     if (!restoredFsHandles.current && rootFs) {
       const restoreFsHandles = async (): Promise<void> => {
@@ -448,23 +478,46 @@ const useFileSystemContextState = (): FileSystemContextState => {
           async ([handleDirectory, handle]) => {
             if (!(await exists(handleDirectory))) {
               try {
-                mapFs(
+                await mapFs(
                   SYSTEM_DIRECTORIES.has(handleDirectory)
                     ? handleDirectory
                     : dirname(handleDirectory),
                   handle
                 );
-              } catch {
+              } catch (error) {
                 // Ignore failure
+                console.error('failed to restore system handle', error)
               }
             }
           }
         );
       };
 
+      const restoreIpfsMounts = async (): Promise<void> => {
+        Object.entries(await IpfsMountsDb.get()).forEach(
+          async ([directory, mountConfig]) => {
+            console.log('restoring ipfs mount', directory, mountConfig)
+            if (!(await exists(directory))) {
+              try {
+                await mountIpfs(
+                  dirname(directory),
+                  mountConfig,
+                );
+                console.log('restored ipfs mount', directory, mountConfig)
+              } catch (error) {
+                // Ignore failure
+                console.error('failed to restore ipfs mount', error)
+              }
+              updateFolder(dirname(directory));
+            }
+          }
+        );
+      };
+
       restoreFsHandles();
+      restoreIpfsMounts();
     }
-  }, [exists, mapFs, rootFs]);
+  }, [exists, mapFs, mountIpfs, updateFolder, rootFs]);
 
   return {
     addFile,
@@ -473,6 +526,7 @@ const useFileSystemContextState = (): FileSystemContextState => {
     createPath,
     deletePath,
     mapFs,
+    mountIpfs,
     mkdirRecursive,
     mountFs,
     moveEntries,
