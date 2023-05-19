@@ -3,10 +3,7 @@ name: Test and Deploy
 permissions:
   contents: write
 
-on:
-  push:
-    branches:
-      - main
+on: [push, pull_request]
 
 jobs:
   test-and-deploy:
@@ -24,9 +21,11 @@ jobs:
         run: yarn test
       - name: Run pre-Deploy
         run: yarn deploy
-      - name: Defeat Jekyll
-        run: touch out/.nojekyll
-      - name: Deploy
-        uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          folder: out
+
+      - name: Deployment
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          touch out/.nojekyll
+          uses: JamesIves/github-pages-deploy-action@v4
+          with:
+            folder: out
