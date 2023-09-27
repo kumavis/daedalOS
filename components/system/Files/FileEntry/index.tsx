@@ -1,17 +1,17 @@
+import StyledFigure from "components/system/Files/FileEntry/StyledFigure";
+import SubIcons from "components/system/Files/FileEntry/SubIcons";
 import extensions from "components/system/Files/FileEntry/extensions";
 import {
   getModifiedTime,
   getTextWrapData,
 } from "components/system/Files/FileEntry/functions";
-import StyledFigure from "components/system/Files/FileEntry/StyledFigure";
-import SubIcons from "components/system/Files/FileEntry/SubIcons";
 import useFile from "components/system/Files/FileEntry/useFile";
 import useFileContextMenu from "components/system/Files/FileEntry/useFileContextMenu";
 import useFileInfo from "components/system/Files/FileEntry/useFileInfo";
 import FileManager from "components/system/Files/FileManager";
-import type { FileStat } from "components/system/Files/FileManager/functions";
 import { isSelectionIntersecting } from "components/system/Files/FileManager/Selection/functions";
 import type { SelectionRect } from "components/system/Files/FileManager/Selection/useSelection";
+import type { FileStat } from "components/system/Files/FileManager/functions";
 import useFileDrop from "components/system/Files/FileManager/useFileDrop";
 import type { FocusEntryFunctions } from "components/system/Files/FileManager/useFocusableEntries";
 import type { FileActions } from "components/system/Files/FileManager/useFolder";
@@ -56,7 +56,7 @@ import {
   getExtension,
   getFormattedSize,
   getHtmlToImage,
-  isCanvasEmpty,
+  isCanvasDrawn,
   isYouTubeUrl,
 } from "utils/functions";
 import { spotlightEffect } from "utils/spotlightEffect";
@@ -75,8 +75,10 @@ type FileEntryProps = {
   fileManagerRef: React.MutableRefObject<HTMLOListElement | null>;
   focusFunctions: FocusEntryFunctions;
   focusedEntries: string[];
+  hasNewFolderIcon?: boolean;
   hideShortcutIcon?: boolean;
   iconOverride?: string;
+  isHeading?: boolean;
   isLoadingFileManager: boolean;
   loadIconImmediately?: boolean;
   name: string;
@@ -86,7 +88,6 @@ type FileEntryProps = {
   selectionRect?: SelectionRect;
   setRenaming: React.Dispatch<React.SetStateAction<string>>;
   stats: FileStat;
-  useNewFolderIcon?: boolean;
   view: FileManagerViewNames;
 };
 
@@ -124,6 +125,7 @@ const FileEntry: FC<FileEntryProps> = ({
   focusedEntries,
   focusFunctions,
   hideShortcutIcon,
+  isHeading,
   isLoadingFileManager,
   loadIconImmediately,
   name,
@@ -133,14 +135,14 @@ const FileEntry: FC<FileEntryProps> = ({
   selectionRect,
   setRenaming,
   stats,
-  useNewFolderIcon,
+  hasNewFolderIcon,
   view,
   iconOverride,
 }) => {
   const { blurEntry, focusEntry } = focusFunctions;
   const { url: changeUrl } = useProcesses();
   const [{ comment, getIcon, icon: fileIcon, pid, subIcons, url }, setInfo] =
-    useFileInfo(path, stats.isDirectory(), useNewFolderIcon);
+    useFileInfo(path, stats.isDirectory(), hasNewFolderIcon);
   const icon = iconOverride || fileIcon;
   const openFile = useFile(url);
   const {
@@ -158,7 +160,6 @@ const FileEntry: FC<FileEntryProps> = ({
   const { formats, sizes } = useTheme();
   const listView = view === "list";
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  const figureRef = useRef<HTMLElement | null>(null);
   const fileName = basename(path);
   const urlExt = getExtension(url);
   const isDynamicIcon = useMemo(
@@ -178,8 +179,14 @@ const FileEntry: FC<FileEntryProps> = ({
       if (!focusedEntries.includes(fileName)) {
         const uniqueName = await createPath(fileDropName, directory, data);
 
-        if (uniqueName) updateFolder(directory, uniqueName);
+        if (uniqueName) {
+          updateFolder(directory, uniqueName);
+
+          return uniqueName;
+        }
       }
+
+      return "";
     },
     directory,
     onDragLeave: () =>
@@ -213,7 +220,12 @@ const FileEntry: FC<FileEntryProps> = ({
         if (url.startsWith("http:") || url.startsWith("https:")) {
           return decodeURIComponent(url);
         }
-        return `Location: ${basename(url, extname(url))} (${dirname(url)})`;
+
+        const directoryPath = dirname(url);
+
+        return `Location: ${basename(url, extname(url))}${
+          !directoryPath || directoryPath === "." ? "" : ` (${dirname(url)})`
+        }`;
       }
       return "";
     }
@@ -221,11 +233,14 @@ const FileEntry: FC<FileEntryProps> = ({
     const type =
       extensions[extension]?.type ||
       `${extension.toUpperCase().replace(".", "")} File`;
+    // eslint-disable-next-line sonarjs/no-collection-size-mischeck
     const fullStats = stats.size < 0 ? await stat(path) : stats;
     const { size: sizeInBytes } = fullStats;
     const modifiedTime = getModifiedTime(path, fullStats);
     const size = getFormattedSize(sizeInBytes);
-    const toolTip = `Type: ${type}${size === "-1" ? "" : `\nSize: ${size}`}`;
+    const toolTip = `Type: ${type}${
+      size === "-1 bytes" ? "" : `\nSize: ${size}`
+    }`;
     const date = new Date(modifiedTime).toISOString().slice(0, 10);
     const time = new Intl.DateTimeFormat(
       DEFAULT_LOCALE,
@@ -249,6 +264,7 @@ const FileEntry: FC<FileEntryProps> = ({
     if (
       openInFileExplorer &&
       fileManagerId &&
+      !window.globalKeyStates?.ctrlKey &&
       !MOUNTABLE_EXTENSIONS.has(urlExt)
     ) {
       changeUrl(fileManagerId, url);
@@ -342,7 +358,7 @@ const FileEntry: FC<FileEntryProps> = ({
                     // Ignore failure to capture
                   }
 
-                  if (iconCanvas && !isCanvasEmpty(iconCanvas)) {
+                  if (iconCanvas && isCanvasDrawn(iconCanvas)) {
                     generatedIcon = iconCanvas.toDataURL("image/png");
                   } else {
                     setTimeout(cacheIcon, TRANSITIONS_IN_MILLISECONDS.WINDOW);
@@ -406,8 +422,7 @@ const FileEntry: FC<FileEntryProps> = ({
               }
             } else {
               try {
-                await unlink(cachedIconPath);
-                updateFolder(dirname(path));
+                if (await unlink(cachedIconPath)) updateFolder(dirname(path));
               } catch {
                 // Ignore issues deleting bad cached icon
               }
@@ -419,13 +434,14 @@ const FileEntry: FC<FileEntryProps> = ({
           ) {
             isDynamicIconLoaded.current = true;
             new IntersectionObserver(
-              ([{ intersectionRatio }], observer) => {
-                if (intersectionRatio > 0) {
-                  observer.disconnect();
-                  getIconAbortController.current = new AbortController();
-                  getIcon(getIconAbortController.current.signal);
-                }
-              },
+              (entries, observer) =>
+                entries.forEach(({ isIntersecting }) => {
+                  if (isIntersecting) {
+                    observer.disconnect();
+                    getIconAbortController.current = new AbortController();
+                    getIcon(getIconAbortController.current.signal);
+                  }
+                }),
               { root: fileManagerRef.current, rootMargin: "5px" }
             ).observe(buttonRef.current);
           }
@@ -529,9 +545,11 @@ const FileEntry: FC<FileEntryProps> = ({
         )}
       >
         <StyledFigure
-          ref={figureRef}
+          ref={useCallback(
+            (figureRef: HTMLElement) => listView && spotlightEffect(figureRef),
+            [listView]
+          )}
           $renaming={renaming}
-          {...(listView && spotlightEffect(figureRef.current))}
         >
           <Icon
             ref={iconRef}
@@ -558,7 +576,12 @@ const FileEntry: FC<FileEntryProps> = ({
               }}
             />
           ) : (
-            <figcaption>
+            <figcaption
+              {...(isHeading && {
+                "aria-level": 1,
+                role: "heading",
+              })}
+            >
               {!isOnlyFocusedEntry || name.length === truncatedName.length
                 ? truncatedName
                 : name}

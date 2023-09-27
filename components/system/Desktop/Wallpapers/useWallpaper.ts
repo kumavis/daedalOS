@@ -1,9 +1,9 @@
 import {
   BASE_CANVAS_SELECTOR,
   BASE_VIDEO_SELECTOR,
-  bgPositionSize,
   WALLPAPER_PATHS,
   WALLPAPER_WORKERS,
+  bgPositionSize,
 } from "components/system/Desktop/Wallpapers/constants";
 import type { WallpaperConfig } from "components/system/Desktop/Wallpapers/types";
 import { config as vantaConfig } from "components/system/Desktop/Wallpapers/vantaWaves/config";
@@ -22,6 +22,7 @@ import {
   PICTURES_FOLDER,
   PROMPT_FILE,
   SLIDESHOW_FILE,
+  SLIDESHOW_TIMEOUT_IN_MILLISECONDS,
   UNSUPPORTED_BACKGROUND_EXTENSIONS,
   VIDEO_FILE_EXTENSIONS,
 } from "utils/constants";
@@ -38,11 +39,15 @@ import {
 
 declare global {
   interface Window {
+    DEBUG_DISABLE_WALLPAPER?: boolean;
     WallpaperDestroy?: () => void;
   }
 }
 
+type WallpaperMessage = { message: string; type: string };
+
 const WALLPAPER_WORKER_NAMES = Object.keys(WALLPAPER_WORKERS);
+const REDUCED_MOTION_PERCENT = 0.1;
 
 let slideshowFiles: string[];
 
@@ -63,17 +68,29 @@ const useWallpaper = (
     vantaWireframe ? "Wireframe" : ""
   );
   const wallpaperTimerRef = useRef<number>();
+  const failedOffscreenContext = useRef(false);
   const loadWallpaper = useCallback(
     async (keepCanvas?: boolean) => {
       if (!desktopRef.current) return;
 
       let config: WallpaperConfig | undefined;
+      const { matches: prefersReducedMotion } = window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+      );
 
       if (wallpaperName === "VANTA") {
-        config = { ...vantaConfig };
+        config = {
+          ...vantaConfig,
+          waveSpeed:
+            vantaConfig.waveSpeed *
+            (prefersReducedMotion ? REDUCED_MOTION_PERCENT : 1),
+        };
         vantaConfig.material.options.wireframe = vantaWireframe;
-      } else if (wallpaperImage === "MATRIX 3D") {
-        config = { volumetric: true };
+      } else if (wallpaperImage.startsWith("MATRIX")) {
+        config = {
+          animationSpeed: prefersReducedMotion ? REDUCED_MOTION_PERCENT : 1,
+          volumetric: wallpaperImage.endsWith("3D"),
+        };
       } else if (wallpaperName === "STABLE_DIFFUSION") {
         const promptsFilePath = `${PICTURES_FOLDER}/${PROMPT_FILE}`;
 
@@ -88,7 +105,7 @@ const useWallpaper = (
 
       document.documentElement.style.setProperty(
         "background",
-        document.documentElement.style.background.replace(/"(.*)"/, ``)
+        document.documentElement.style.background.replace(/"(.*)"/, "")
       );
 
       if (!keepCanvas) {
@@ -97,7 +114,11 @@ const useWallpaper = (
         window.WallpaperDestroy?.();
       }
 
-      if (window.OffscreenCanvas !== undefined && wallpaperWorker.current) {
+      if (
+        !failedOffscreenContext.current &&
+        window.OffscreenCanvas !== undefined &&
+        wallpaperWorker.current
+      ) {
         const workerConfig = { config, devicePixelRatio: 1 };
 
         if (keepCanvas) {
@@ -110,6 +131,19 @@ const useWallpaper = (
             [offscreen]
           );
 
+          wallpaperWorker.current.addEventListener(
+            "message",
+            ({ data }: { data: WallpaperMessage }) => {
+              if (data.type === "[error]") {
+                if (data.message.includes("getContext")) {
+                  failedOffscreenContext.current = true;
+                  loadWallpaper();
+                } else {
+                  setWallpaper("SLIDESHOW");
+                }
+              }
+            }
+          );
           if (wallpaperName === "STABLE_DIFFUSION") {
             const loadingStatus = document.createElement("div");
 
@@ -124,7 +158,7 @@ const useWallpaper = (
 
             wallpaperWorker.current.addEventListener(
               "message",
-              ({ data }: { data: { message: string; type: string } }) => {
+              ({ data }: { data: WallpaperMessage }) => {
                 if (data.type === "[error]") {
                   setWallpaper("VANTA");
                 } else if (data.type) {
@@ -142,9 +176,11 @@ const useWallpaper = (
           }
         }
       } else if (WALLPAPER_PATHS[wallpaperName]) {
-        WALLPAPER_PATHS[wallpaperName]().then(({ default: wallpaper }) =>
-          wallpaper?.(desktopRef.current, config)
-        );
+        WALLPAPER_PATHS[wallpaperName]()
+          .then(
+            ({ default: wallpaper }) => wallpaper?.(desktopRef.current, config)
+          )
+          .catch(() => setWallpaper("VANTA"));
       } else {
         setWallpaper("VANTA");
       }
@@ -241,7 +277,7 @@ const useWallpaper = (
     } else if (wallpaperName === "APOD") {
       document.documentElement.style.setProperty(
         "background",
-        document.documentElement.style.background.replace(/"(.*)"/, ``)
+        document.documentElement.style.background.replace(/"(.*)"/, "")
       );
 
       const [, currentUrl, currentDate] = wallpaperImage.split(" ");
@@ -311,7 +347,7 @@ const useWallpaper = (
         video.style.objectPosition = "center center";
         video.style.zIndex = "-1";
 
-        desktopRef.current?.appendChild(video);
+        desktopRef.current?.append(video);
       } else {
         const applyWallpaper = (url: string): void => {
           const repeat = newWallpaperFit === "tile" ? "repeat" : "no-repeat";
@@ -342,7 +378,7 @@ const useWallpaper = (
           if (isSlideshow) {
             wallpaperTimerRef.current = window.setTimeout(
               loadFileWallpaper,
-              MILLISECONDS_IN_MINUTE
+              SLIDESHOW_TIMEOUT_IN_MILLISECONDS
             );
           }
         }
@@ -366,7 +402,7 @@ const useWallpaper = (
   ]);
 
   useEffect(() => {
-    if (sessionLoaded) {
+    if (sessionLoaded && !window.DEBUG_DISABLE_WALLPAPER) {
       if (wallpaperTimerRef.current) {
         window.clearTimeout(wallpaperTimerRef.current);
       }

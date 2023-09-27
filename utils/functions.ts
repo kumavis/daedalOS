@@ -48,16 +48,6 @@ export const sendMouseClick = (target: HTMLElement, count = 1): void => {
   sendMouseClick(target, count - 1);
 };
 
-export const toggleFullScreen = async (): Promise<void> => {
-  try {
-    await (document.fullscreenElement
-      ? document.exitFullscreen()
-      : document.documentElement.requestFullscreen());
-  } catch {
-    // Ignore failure to enter fullscreen
-  }
-};
-
 export const toggleShowDesktop = (
   processes: Processes,
   minimize: (id: string) => void
@@ -85,11 +75,12 @@ export const imageSrc = (
   const ratioSize = size * ratio;
   const imageSize =
     expectedSize === size ? Math.min(maxIconSize, ratioSize) : ratioSize;
+  const isCachedIcon = extname(imageName) === ".cache";
 
   return `${join(
     dirname(imagePath),
-    `${imageSize}x${imageSize}`,
-    `${imageName}${extension}`
+    isCachedIcon ? "" : `${imageSize}x${imageSize}`,
+    `${imageName}${isCachedIcon ? "" : extension}`
   ).replace(/\\/g, "/")}${ratio > 1 ? ` ${ratio}x` : ""}`;
 };
 
@@ -298,7 +289,7 @@ const calcGridDropPosition = (
   };
 };
 
-const updateIconPositionsIfEmpty = (
+export const updateIconPositionsIfEmpty = (
   url: string,
   gridElement: HTMLElement | null,
   iconPositions: IconPositions,
@@ -471,27 +462,53 @@ export const updateIconPositions = (
   }
 };
 
-export const isCanvasDrawn = (canvas?: HTMLCanvasElement | null): boolean =>
-  canvas instanceof HTMLCanvasElement &&
-  Boolean(
+export const isCanvasDrawn = (canvas?: HTMLCanvasElement | null): boolean => {
+  if (!(canvas instanceof HTMLCanvasElement)) return false;
+
+  const { data: pixels = [] } =
     canvas
-      .getContext("2d", {
-        willReadFrequently: true,
-      })
-      ?.getImageData(0, 0, canvas.width, canvas.height)
-      .data.some((channel) => channel !== 0)
-  );
+      .getContext("2d", { willReadFrequently: true })
+      ?.getImageData(0, 0, canvas.width, canvas.height) || {};
+
+  if (pixels.length === 0) return false;
+
+  const bwPixels: Record<number, number> = { 0: 0, 255: 0 };
+
+  for (const pixel of pixels) {
+    if (pixel !== 0 && pixel !== 255) return true;
+
+    bwPixels[pixel] += 1;
+  }
+
+  const isBlankCanvas =
+    bwPixels[0] === pixels.length ||
+    bwPixels[255] === pixels.length ||
+    (bwPixels[255] + bwPixels[0] === pixels.length &&
+      bwPixels[0] / 3 === bwPixels[255]);
+
+  return !isBlankCanvas;
+};
 
 const bytesInKB = 1024;
 const bytesInMB = 1022976; // 1024 * 999
 const bytesInGB = 1047527424; // 1024 * 1024 * 999
 const bytesInTB = 1072668082176; // 1024 * 1024 * 1024 * 999
 
-const formatNumber = (number: number): string =>
-  new Intl.NumberFormat("en-US", {
-    maximumSignificantDigits: number < 1 ? 2 : 3,
+const formatNumber = (number: number): string => {
+  const formattedNumber = new Intl.NumberFormat("en-US", {
+    maximumSignificantDigits: number < 1 ? 2 : 4,
     minimumSignificantDigits: number < 1 ? 2 : 3,
   }).format(Number(number.toFixed(4).slice(0, -2)));
+
+  const [integer, decimal] = formattedNumber.split(".");
+
+  if (integer.length === 3) return integer;
+  if (integer.length === 2 && decimal.length === 2) {
+    return `${integer}.${decimal[0]}`;
+  }
+
+  return formattedNumber;
+};
 
 export const getFormattedSize = (size = 0): string => {
   if (size === 1) return "1 byte";
@@ -694,14 +711,11 @@ export const jsonFetch = async (
   return json || {};
 };
 
-export const isCanvasEmpty = (canvas: HTMLCanvasElement): boolean =>
-  !canvas
-    .getContext("2d")
-    ?.getImageData(0, 0, canvas.width, canvas.height)
-    .data.some(Boolean);
-
 export const generatePrettyTimestamp = (): string =>
   new Intl.DateTimeFormat(DEFAULT_LOCALE, TIMESTAMP_DATE_FORMAT)
     .format(new Date())
     .replace(/[/:]/g, "-")
     .replace(",", "");
+
+export const isFileSystemMappingSupported = (): boolean =>
+  typeof FileSystemHandle === "function" && "showDirectoryPicker" in window;

@@ -205,8 +205,8 @@ export const loadMilkdropWhenNeeded = (webamp: WebampCI): void => {
         unsubscribe();
 
         webamp.store.subscribe(() => {
-          const webampDesktop = [...document.body.children].find((node) =>
-            node.classList?.contains("webamp-desktop")
+          const webampDesktop = [...document.body.children].find(
+            (node) => node.classList?.contains("webamp-desktop")
           );
 
           if (webampDesktop) {
@@ -327,6 +327,7 @@ export const tracksFromPlaylist = async (
   defaultName?: string
 ): Promise<Track[]> => {
   const { ASX, M3U, PLS } = await import("playlist-parser");
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
   const parser: Record<string, typeof ASX | typeof M3U | typeof PLS> = {
     ".asx": ASX,
     ".m3u": M3U,

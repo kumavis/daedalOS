@@ -11,6 +11,7 @@ export type MenuItem = {
   menu?: MenuItem[];
   primary?: boolean;
   seperator?: boolean;
+  share?: boolean;
   toggle?: boolean;
 };
 
@@ -20,9 +21,11 @@ export type MenuState = {
   y?: number;
 };
 
+export type CaptureTriggerEvent = React.MouseEvent | React.TouchEvent;
+
 export type ContextMenuCapture = {
   onContextMenuCapture: (
-    event?: React.MouseEvent | React.TouchEvent,
+    event?: CaptureTriggerEvent,
     domRect?: DOMRect
   ) => void;
   onTouchEnd?: React.TouchEventHandler;
@@ -31,7 +34,9 @@ export type ContextMenuCapture = {
 };
 
 type MenuContextState = {
-  contextMenu: (getItems: () => MenuItem[]) => ContextMenuCapture;
+  contextMenu: (
+    getItems: (event?: CaptureTriggerEvent) => MenuItem[]
+  ) => ContextMenuCapture;
   menu: MenuState;
   setMenu: React.Dispatch<React.SetStateAction<MenuState>>;
 };
@@ -41,9 +46,11 @@ const useMenuContextState = (): MenuContextState => {
   const touchTimer = useRef<number>(0);
   const touchEvent = useRef<React.TouchEvent>();
   const contextMenu = useCallback(
-    (getItems: () => MenuItem[]): ContextMenuCapture => {
+    (
+      getItems: (event?: CaptureTriggerEvent) => MenuItem[]
+    ): ContextMenuCapture => {
       const onContextMenuCapture = (
-        event?: React.MouseEvent | React.TouchEvent,
+        event?: CaptureTriggerEvent,
         domRect?: DOMRect
       ): void => {
         let x = 0;
@@ -61,7 +68,7 @@ const useMenuContextState = (): MenuContextState => {
           y = inputY + height;
         }
 
-        const items = getItems();
+        const items = getItems(event);
 
         setMenu({ items: items.length > 0 ? items : undefined, x, y });
       };

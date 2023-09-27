@@ -1,13 +1,14 @@
 import {
-  config,
   CONTROL_BAR_HEIGHT,
   VideoResizeKey,
   YT_TYPE,
+  config,
 } from "components/apps/VideoPlayer/config";
 import type {
   SourceObjectWithUrl,
   VideoPlayer,
 } from "components/apps/VideoPlayer/types";
+import type { ContainerHookProps } from "components/system/Apps/AppContainer";
 import { getMimeType } from "components/system/Files/FileEntry/functions";
 import useTitle from "components/system/Window/useTitle";
 import useWindowSize from "components/system/Window/useWindowSize";
@@ -26,13 +27,13 @@ import {
   viewWidth,
 } from "utils/functions";
 
-const useVideoPlayer = (
-  id: string,
-  url: string,
-  containerRef: React.MutableRefObject<HTMLDivElement | null>,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
-  loading: boolean
-): void => {
+const useVideoPlayer = ({
+  containerRef,
+  id,
+  loading,
+  setLoading,
+  url,
+}: ContainerHookProps): void => {
   const { readFile } = useFileSystem();
   const {
     linkElement,
@@ -94,11 +95,16 @@ const useVideoPlayer = (
       };
 
       videoElement.addEventListener("dblclick", toggleFullscreen);
-      videoElement.addEventListener("mousewheel", (event) => {
-        videoPlayer.volume(
-          videoPlayer.volume() + ((event as WheelEvent).deltaY > 0 ? -0.1 : 0.1)
-        );
-      });
+      videoElement.addEventListener(
+        "mousewheel",
+        (event) => {
+          videoPlayer.volume(
+            videoPlayer.volume() +
+              ((event as WheelEvent).deltaY > 0 ? -0.1 : 0.1)
+          );
+        },
+        { passive: true }
+      );
       containerRef.current
         ?.closest("section")
         ?.addEventListener("keydown", ({ key, altKey, ctrlKey }) => {

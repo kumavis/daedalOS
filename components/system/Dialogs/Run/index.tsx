@@ -1,7 +1,7 @@
 import { parseCommand } from "components/apps/Terminal/functions";
 import type { ComponentProcessProps } from "components/system/Apps/RenderComponent";
 import StyledRun from "components/system/Dialogs/Run/StyledRun";
-import StyledButton from "components/system/Dialogs/Transfer/StyledButton";
+import StyledButton from "components/system/Dialogs/StyledButton";
 import {
   getProcessByFileExtension,
   getShortcutInfo,
@@ -25,8 +25,9 @@ import spawnSheep from "utils/spawnSheep";
 
 const OPEN_ID = "open";
 
-const resourceAliasMap: Record<string, string> = {
+export const resourceAliasMap: Record<string, string> = {
   cmd: "Terminal",
+  code: "MonacoEditor",
   dos: "JSDOS",
   explorer: "FileExplorer",
   monaco: "MonacoEditor",
@@ -47,7 +48,7 @@ const utilCommandMap: Record<string, () => void> = {
   sheep: spawnSheep,
 };
 
-const Run: FC<ComponentProcessProps> = () => {
+const Run: FC<ComponentProcessProps> = ({ id }) => {
   const {
     open,
     closeWithTransition,
@@ -59,6 +60,10 @@ const Run: FC<ComponentProcessProps> = () => {
   const [isInputFocused, setIsInputFocused] = useState(true);
   const [isEmptyInput, setIsEmptyInput] = useState(!runHistory[0]);
   const [running, setRunning] = useState(false);
+  const checkIsEmpty: React.KeyboardEventHandler | React.ChangeEventHandler = ({
+    target,
+  }: React.KeyboardEvent | React.ChangeEvent): void =>
+    setIsEmptyInput(!(target as HTMLInputElement)?.value);
   const runResource = useCallback(
     async (resource?: string) => {
       if (!resource) return;
@@ -81,9 +86,13 @@ const Run: FC<ComponentProcessProps> = () => {
           resourceUrl.length > 0 ? resourceUrl.join(" ") : resourcePid;
       }
 
+      const isNostr = resourcePath.startsWith("nostr:");
+
+      if (isNostr) open("Messenger", { url: resourcePath });
+
       const isIpfs = resourcePath.startsWith("ipfs://");
 
-      if (resourceExists || isIpfs || (await exists(resourcePath))) {
+      if (resourceExists || isNostr || isIpfs || (await exists(resourcePath))) {
         if (isIpfs) {
           try {
             const ipfsData = await getIpfsResource(resourcePath);
@@ -171,12 +180,13 @@ const Run: FC<ComponentProcessProps> = () => {
 
       setRunning(false);
 
-      if (closeOnExecute) closeWithTransition("Run");
+      if (closeOnExecute) closeWithTransition(id);
     },
     [
       closeWithTransition,
       createPath,
       exists,
+      id,
       open,
       readFile,
       setRunHistory,
@@ -186,11 +196,11 @@ const Run: FC<ComponentProcessProps> = () => {
   );
 
   useLayoutEffect(() => {
-    if (foregroundId === "Run") {
+    if (foregroundId === id) {
       inputRef.current?.focus(PREVENT_SCROLL);
       if (inputRef.current?.value) inputRef.current?.select();
     }
-  }, [foregroundId]);
+  }, [foregroundId, id]);
 
   useLayoutEffect(() => {
     if (runProcess?.url && inputRef.current) {
@@ -203,7 +213,7 @@ const Run: FC<ComponentProcessProps> = () => {
 
   return (
     <StyledRun
-      {...useFileDrop({ id: "Run" })}
+      {...useFileDrop({ id })}
       onContextMenu={(event) => {
         if (!(event.target instanceof HTMLInputElement)) {
           haltEvent(event);
@@ -234,6 +244,9 @@ const Run: FC<ComponentProcessProps> = () => {
                 setIsInputFocused(false);
               }
             }}
+            onChange={
+              checkIsEmpty as React.ChangeEventHandler<HTMLInputElement>
+            }
             onFocusCapture={() => setIsInputFocused(true)}
             onKeyDownCapture={(event) => {
               const { key } = event;
@@ -241,11 +254,11 @@ const Run: FC<ComponentProcessProps> = () => {
               if (key === "Enter") runResource(inputRef.current?.value.trim());
               if (key === "Escape") {
                 haltEvent(event);
-                closeWithTransition("Run");
+                closeWithTransition(id);
               }
             }}
-            onKeyUp={({ target }) =>
-              setIsEmptyInput(!(target as HTMLInputElement)?.value)
+            onKeyUp={
+              checkIsEmpty as React.KeyboardEventHandler<HTMLInputElement>
             }
             spellCheck="false"
             type="text"
@@ -279,7 +292,7 @@ const Run: FC<ComponentProcessProps> = () => {
       </div>
       <nav>
         <StyledButton
-          $active={isInputFocused}
+          className={isInputFocused ? "focus" : ""}
           disabled={isEmptyInput || running}
           onClick={() => runResource(inputRef.current?.value.trim())}
         >
@@ -287,7 +300,7 @@ const Run: FC<ComponentProcessProps> = () => {
         </StyledButton>
         <StyledButton
           disabled={running}
-          onClick={() => closeWithTransition("Run")}
+          onClick={() => closeWithTransition(id)}
         >
           Cancel
         </StyledButton>

@@ -2,9 +2,10 @@ import FileManager from "components/system/Files/FileManager";
 import Sidebar from "components/system/StartMenu/Sidebar";
 import StyledStartMenu from "components/system/StartMenu/StyledStartMenu";
 import StyledStartMenuBackground from "components/system/StartMenu/StyledStartMenuBackground";
-import useStartMenuTransition from "components/system/StartMenu/useStartMenuTransition";
+import useTaskbarItemTransition from "components/system/Taskbar/useTaskbarItemTransition";
 import type { Variant } from "framer-motion";
 import { useLayoutEffect, useRef, useState } from "react";
+import { useTheme } from "styled-components";
 import {
   DEFAULT_SCROLLBAR_WIDTH,
   FOCUSABLE_ELEMENT,
@@ -47,7 +48,10 @@ const StartMenu: FC<StartMenuProps> = ({ toggleStartMenu }) => {
       }
     }
   };
-  const startMenuTransition = useStartMenuTransition();
+  const {
+    sizes: { startMenu },
+  } = useTheme();
+  const startMenuTransition = useTaskbarItemTransition(startMenu.maxHeight);
   const { height } =
     (startMenuTransition.variants?.active as StyleVariant) ?? {};
 
@@ -58,6 +62,9 @@ const StartMenu: FC<StartMenuProps> = ({ toggleStartMenu }) => {
       ref={menuRef}
       $showScrolling={showScrolling}
       onBlurCapture={maybeCloseMenu}
+      onKeyDown={({ key }) => {
+        if (key === "Escape") toggleStartMenu(false);
+      }}
       onMouseMove={revealScrolling}
       {...startMenuTransition}
       {...FOCUSABLE_ELEMENT}
@@ -69,12 +76,12 @@ const StartMenu: FC<StartMenuProps> = ({ toggleStartMenu }) => {
         view="list"
         hideLoading
         hideShortcutIcons
+        isStartMenu
         loadIconsImmediately
         preloadShortcuts
         readOnly
         skipFsWatcher
         skipSorting
-        useNewFolderIcon
       />
     </StyledStartMenu>
   );

@@ -1,14 +1,16 @@
 import { loader } from "@monaco-editor/react";
 import {
+  URL_DELIMITER,
   config,
   theme,
-  URL_DELIMITER,
 } from "components/apps/MonacoEditor/config";
 import {
   detectLanguage,
   getSaveFileInfo,
+  relocateShadowRoot,
 } from "components/apps/MonacoEditor/functions";
 import type { Model } from "components/apps/MonacoEditor/types";
+import type { ContainerHookProps } from "components/system/Apps/AppContainer";
 import useTitle from "components/system/Window/useTitle";
 import { useFileSystem } from "contexts/fileSystem";
 import { useProcesses } from "contexts/process";
@@ -22,12 +24,12 @@ import {
 import { getExtension } from "utils/functions";
 import { lockGlobal, unlockGlobal } from "utils/globals";
 
-const useMonaco = (
-  id: string,
-  url: string,
-  containerRef: React.MutableRefObject<HTMLDivElement | null>,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>
-): void => {
+const useMonaco = ({
+  containerRef,
+  id,
+  setLoading,
+  url,
+}: ContainerHookProps): void => {
   const { readFile, updateFolder, writeFile } = useFileSystem();
   const { argument: setArgument } = useProcesses();
   const { prependFileToTitle } = useTitle(id);
@@ -60,6 +62,7 @@ const useMonaco = (
   const loadFile = useCallback(async () => {
     if (monaco && editor && url.startsWith("/")) {
       unlockGlobal("define");
+
       editor.getModel()?.dispose();
       editor.setModel(await createModel());
       window.setTimeout(
@@ -86,6 +89,8 @@ const useMonaco = (
     editor?.onKeyDown(async (event) => {
       const { ctrlKey, code, keyCode } = event;
 
+      // Q: Is it 83 or 49?
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
       if (ctrlKey && (code === "KeyS" || keyCode === 83)) {
         event.preventDefault();
 
@@ -112,6 +117,11 @@ const useMonaco = (
         ?.addEventListener("focus", () => currentEditor.focus(), {
           passive: true,
         });
+
+      containerRef.current?.addEventListener("blur", relocateShadowRoot, {
+        capture: true,
+        passive: true,
+      });
 
       setEditor(currentEditor);
       setArgument(id, "editor", currentEditor);

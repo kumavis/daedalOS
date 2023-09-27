@@ -1,8 +1,11 @@
 import type { Core } from "components/apps/Emulator/config";
 import { emulatorCores } from "components/apps/Emulator/config";
 import type { Emulator } from "components/apps/Emulator/types";
+import type { ContainerHookProps } from "components/system/Apps/AppContainer";
+import useEmscriptenMount from "components/system/Files/FileManager/useEmscriptenMount";
 import useTitle from "components/system/Window/useTitle";
 import { useFileSystem } from "contexts/fileSystem";
+import type { EmscriptenFS } from "contexts/fileSystem/useAsyncFs";
 import { useProcesses } from "contexts/process";
 import { basename, dirname, extname, join } from "path";
 import { useCallback, useEffect, useRef } from "react";
@@ -16,15 +19,16 @@ const getCore = (extension: string): [string, Core] => {
   ) || []) as [string, Core];
 };
 
-const useEmulator = (
-  id: string,
-  url: string,
-  containerRef: React.MutableRefObject<HTMLDivElement | null>,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
-  loading: boolean
-): void => {
+const useEmulator = ({
+  containerRef,
+  id,
+  loading,
+  setLoading,
+  url,
+}: ContainerHookProps): void => {
   const { exists, mkdirRecursive, readFile, updateFolder, writeFile } =
     useFileSystem();
+  const mountEmFs = useEmscriptenMount();
   const { linkElement, processes: { [id]: { closing = false } = {} } = {} } =
     useProcesses();
   const { prependFileToTitle } = useTitle(id);
@@ -38,7 +42,13 @@ const useEmulator = (
     if (loadedUrlRef.current) {
       if (loadedUrlRef.current !== url) {
         loadedUrlRef.current = "";
-        window.EJS_terminate?.();
+
+        try {
+          window.EJS_terminate?.();
+        } catch {
+          // Ignore errors during termination
+        }
+
         if (containerRef.current) {
           const div = document.createElement("div");
 
@@ -75,6 +85,7 @@ const useEmulator = (
         }
 
         setLoading(false);
+        mountEmFs(window.FS as EmscriptenFS, "EmulatorJs");
         emulatorRef.current = currentEmulator;
       };
 
@@ -129,6 +140,7 @@ const useEmulator = (
     mkdirRecursive,
     prependFileToTitle,
     readFile,
+    mountEmFs,
     setLoading,
     updateFolder,
     url,
@@ -139,9 +151,10 @@ const useEmulator = (
     if (url) loadRom();
     else {
       setLoading(false);
+      mountEmFs(window.FS as EmscriptenFS, "EmulatorJs");
       containerRef.current?.classList.add("drop");
     }
-  }, [containerRef, loadRom, setLoading, url]);
+  }, [containerRef, loadRom, mountEmFs, setLoading, url]);
 
   useEffect(() => {
     if (!loading) {

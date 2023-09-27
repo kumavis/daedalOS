@@ -155,6 +155,17 @@ const directory: Processes = {
     ],
     title: "Marked",
   },
+  Messenger: {
+    Component: dynamic(() => import("components/apps/Messenger")),
+    backgroundColor: "#242526",
+    defaultSize: {
+      height: 500,
+      width: 425,
+    },
+    icon: "/System/Icons/messenger.webp",
+    singleton: true,
+    title: "Messenger",
+  },
   MonacoEditor: {
     Component: dynamic(() => import("components/apps/MonacoEditor")),
     backgroundColor: "#1E1E1E",
@@ -185,6 +196,19 @@ const directory: Processes = {
     icon: "/System/Icons/opentype.webp",
     preferProcessIcon: true,
     title: "OpenType",
+  },
+  OpenWith: {
+    Component: dynamic(() => import("components/system/Dialogs/OpenWith")),
+    allowResizing: false,
+    backgroundColor: "#FFF",
+    defaultSize: {
+      height: 492,
+      width: 392,
+    },
+    hideTaskbarEntry: true,
+    hideTitlebar: true,
+    icon: "/System/Icons/unknown.webp",
+    title: "Open With",
   },
   PDF: {
     Component: dynamic(() => import("components/apps/PDF")),
@@ -218,6 +242,19 @@ const directory: Processes = {
     hideTitlebarIcon: true,
     icon: "/System/Icons/photos.webp",
     title: "Photos",
+  },
+  Properties: {
+    Component: dynamic(() => import("components/system/Dialogs/Properties")),
+    allowResizing: false,
+    backgroundColor: "rgb(240, 240, 240)",
+    defaultSize: {
+      height: 412,
+      width: 361,
+    },
+    hideMaximizeButton: true,
+    hideMinimizeButton: true,
+    icon: "",
+    title: "Properties",
   },
   Quake3: {
     Component: dynamic(() => import("components/apps/Quake3")),
@@ -291,8 +328,8 @@ const directory: Processes = {
     Component: dynamic(() => import("components/apps/Terminal")),
     backgroundColor: "rgba(12, 12, 12, 0.5)",
     defaultSize: {
-      height: 340,
-      width: 553,
+      height: 369,
+      width: 615,
     },
     icon: "/System/Icons/xterm.webp",
     libs: [

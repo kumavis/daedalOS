@@ -1,6 +1,7 @@
 import StyledVim from "components/apps/Vim/StyledVim";
 import type { QueueItem } from "components/apps/Vim/types";
 import type { ComponentProcessProps } from "components/system/Apps/RenderComponent";
+import useEmscriptenMount from "components/system/Files/FileManager/useEmscriptenMount";
 import useFileDrop from "components/system/Files/FileManager/useFileDrop";
 import useTitle from "components/system/Window/useTitle";
 import { useFileSystem } from "contexts/fileSystem";
@@ -16,6 +17,7 @@ const Vim: FC<ComponentProcessProps> = ({ id }) => {
     processes: { [id]: process },
   } = useProcesses();
   const { readFile, updateFolder, writeFile } = useFileSystem();
+  const mountEmFs = useEmscriptenMount();
   const { prependFileToTitle } = useTitle(id);
   const { libs = [], url = "" } = process || {};
   const [updateQueue, setUpdateQueue] = useState<QueueItem[]>([]);
@@ -45,6 +47,7 @@ const Vim: FC<ComponentProcessProps> = ({ id }) => {
       postRun: [
         () => {
           loading.current = false;
+          mountEmFs(window.VimWrapperModule?.VimModule?.FS, "Vim");
         },
       ],
       preRun: [
@@ -90,7 +93,15 @@ const Vim: FC<ComponentProcessProps> = ({ id }) => {
     });
 
     prependFileToTitle(basename(saveUrl));
-  }, [closeWithTransition, id, libs, prependFileToTitle, readFile, url]);
+  }, [
+    closeWithTransition,
+    id,
+    libs,
+    mountEmFs,
+    prependFileToTitle,
+    readFile,
+    url,
+  ]);
 
   useEffect(() => {
     if (updateQueue.length > 0) {

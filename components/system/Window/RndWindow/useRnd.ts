@@ -1,10 +1,10 @@
-import { isWindowOutsideBounds } from "components/system/Window/functions";
 import rndDefaults, {
   RESIZING_DISABLED,
   RESIZING_ENABLED,
 } from "components/system/Window/RndWindow/rndDefaults";
 import useDraggable from "components/system/Window/RndWindow/useDraggable";
 import useResizable from "components/system/Window/RndWindow/useResizable";
+import { isWindowOutsideBounds } from "components/system/Window/functions";
 import { useProcesses } from "contexts/process";
 import { useSession } from "contexts/session";
 import { useCallback, useMemo } from "react";

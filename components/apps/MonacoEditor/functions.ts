@@ -19,16 +19,27 @@ export const detectLanguage = (ext: string): string => {
   return id;
 };
 
-export const relocateShadowRoot: React.FocusEventHandler = ({
-  relatedTarget,
-}): void => {
-  if (
-    relatedTarget instanceof HTMLElement &&
-    relatedTarget.classList.value === "shadow-root-host" &&
-    relatedTarget.shadowRoot instanceof ShadowRoot &&
-    relatedTarget.closest("section")
-  ) {
-    relatedTarget.closest("section")?.parentNode?.prepend(relatedTarget);
+export const relocateShadowRoot = ({ relatedTarget }: FocusEvent): void => {
+  if (relatedTarget instanceof HTMLElement) {
+    let targetElement: HTMLElement | undefined;
+
+    if (relatedTarget.classList.value === "actions-container") {
+      targetElement = relatedTarget.closest(
+        ".monaco-menu-container"
+      ) as HTMLElement;
+    } else if (
+      relatedTarget.classList.value === "shadow-root-host" &&
+      relatedTarget.shadowRoot instanceof ShadowRoot
+    ) {
+      targetElement = relatedTarget;
+    }
+
+    if (
+      targetElement instanceof HTMLElement &&
+      targetElement.closest("section")
+    ) {
+      targetElement.closest("section")?.parentNode?.prepend(targetElement);
+    }
   }
 };
 

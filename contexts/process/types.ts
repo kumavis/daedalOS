@@ -9,6 +9,7 @@ import type * as Monaco from "monaco-editor/esm/vs/editor/editor.api";
 type DialogProcessArguments = {
   fileReaders?: FileReaders | ObjectReaders;
   progress?: number;
+  shortcutPath?: string;
 };
 
 type MonacoProcessArguments = {
@@ -36,6 +37,7 @@ type BaseProcessArguments = {
   hideMaximizeButton?: boolean;
   hideMinimizeButton?: boolean;
   hideTaskbarEntry?: boolean;
+  hideTitlebar?: boolean;
   hideTitlebarIcon?: boolean;
   initialRelativePosition?: RelativePosition;
   libs?: string[];

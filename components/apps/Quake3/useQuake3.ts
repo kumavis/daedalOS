@@ -1,3 +1,6 @@
+import type { ContainerHookProps } from "components/system/Apps/AppContainer";
+import useEmscriptenMount from "components/system/Files/FileManager/useEmscriptenMount";
+import type { EmscriptenFS } from "contexts/fileSystem/useAsyncFs";
 import { useProcesses } from "contexts/process";
 import { useSession } from "contexts/session";
 import { useEffect } from "react";
@@ -22,12 +25,11 @@ declare global {
   }
 }
 
-const useQuake3 = (
-  id: string,
-  _url: string,
-  containerRef: React.MutableRefObject<HTMLDivElement | null>,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>
-): void => {
+const useQuake3 = ({
+  containerRef,
+  id,
+  setLoading,
+}: ContainerHookProps): void => {
   const { processes: { [id]: { libs = [] } = {} } = {} } = useProcesses();
   const {
     windowStates: { [id]: windowState },
@@ -35,6 +37,7 @@ const useQuake3 = (
   const {
     sizes: { titleBar },
   } = useTheme();
+  const mountEmFs = useEmscriptenMount();
   const { size } = windowState || {};
 
   useEffect(() => {
@@ -46,8 +49,9 @@ const useQuake3 = (
       window.ioq3.callMain([]);
 
       setLoading(false);
+      mountEmFs(window.FS as EmscriptenFS, "Quake3");
     });
-  }, [containerRef, libs, setLoading]);
+  }, [containerRef, libs, mountEmFs, setLoading]);
 
   useEffect(() => {
     if (!window.ioq3) return;

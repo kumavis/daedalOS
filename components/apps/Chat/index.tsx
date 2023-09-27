@@ -1,16 +1,16 @@
-import {
-  AI_IMAGES_FOLDER,
-  commandMap,
-  EngineErrorMessage,
-} from "components/apps/Chat/config";
-import { getLetterTypingSpeed } from "components/apps/Chat/functions";
-import { Send, Settings } from "components/apps/Chat/Icons";
+import { Reset, Send, Settings } from "components/apps/Chat/Icons";
 import StyledChat from "components/apps/Chat/StyledChat";
 import StyledInfo from "components/apps/Chat/StyledInfo";
 import StyledInputArea from "components/apps/Chat/StyledInputArea";
 import StyledLoadingEllipsis from "components/apps/Chat/StyledLoadingEllipsis";
 import StyledMessage from "components/apps/Chat/StyledMessage";
 import StyledWarning from "components/apps/Chat/StyledWarning";
+import {
+  AI_IMAGES_FOLDER,
+  EngineErrorMessage,
+  commandMap,
+} from "components/apps/Chat/config";
+import { getLetterTypingSpeed } from "components/apps/Chat/functions";
 import type { Message } from "components/apps/Chat/types";
 import type { ComponentProcessProps } from "components/system/Apps/RenderComponent";
 import { getMimeType } from "components/system/Files/FileEntry/functions";
@@ -22,10 +22,16 @@ import { useProcesses } from "contexts/process";
 import processDirectory from "contexts/process/directory";
 import { useSession } from "contexts/session";
 import { useInference } from "hooks/useInference/useInference";
+import { useWebGPUCheck } from "hooks/useWebGPUCheck";
 import { basename, join } from "path";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Button from "styles/common/Button";
-import { IMAGE_FILE_EXTENSIONS, PREVENT_SCROLL } from "utils/constants";
+import {
+  IMAGE_FILE_EXTENSIONS,
+  PREVENT_SCROLL,
+  PROCESS_DELIMITER,
+  TRANSITIONS_IN_MILLISECONDS,
+} from "utils/constants";
 import {
   bufferToUrl,
   generatePrettyTimestamp,
@@ -40,9 +46,11 @@ type ActionMessage = {
 };
 
 const Chat: FC<ComponentProcessProps> = ({ id }) => {
-  const { aiApi, setWallpaper } = useSession();
+  const { aiApi, setAiApi, setWallpaper } = useSession();
   const { readFile, mkdirRecursive, writeFile } = useFileSystem();
   const {
+    close,
+    open,
     processes: { [id]: process },
     title,
     url: setUrl,
@@ -54,7 +62,7 @@ const Chat: FC<ComponentProcessProps> = ({ id }) => {
     error: aiError,
     name,
     resetError,
-  } = useInference(apiKey, engine);
+  } = useInference(engine.startsWith("WebLLM") ? engine : apiKey, engine);
   const messagesRef = useRef<HTMLUListElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState<string>("");
@@ -124,6 +132,22 @@ const Chat: FC<ComponentProcessProps> = ({ id }) => {
     setStatus(type && message ? `${type} ${message}` : "");
   }, []);
   const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const [ttsVoice, setTTSVoice] = useState<SpeechSynthesisVoice>();
+  const speakMessage = useCallback(
+    (text: string, voice = ttsVoice) => {
+      if (!voice) return;
+
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      utterance.voice = voice;
+      utterance.pitch = 0.9;
+      utterance.rate = 1.5;
+      utterance.volume = 0.5;
+
+      window.speechSynthesis.speak(utterance);
+    },
+    [ttsVoice]
+  );
   const sendMessage = useCallback(
     (userMessage: string): void => {
       if (!AI) return;
@@ -175,11 +199,22 @@ const Chat: FC<ComponentProcessProps> = ({ id }) => {
             }),
             type: "assistant",
           });
+
+          if (ttsVoice) speakMessage(generatedMessage);
         }
       });
       addMessage({ text: userText, type: "user" });
     },
-    [AI, addMessage, messages, statusLogger, systemPrompt, waitForChat]
+    [
+      AI,
+      addMessage,
+      messages,
+      speakMessage,
+      statusLogger,
+      systemPrompt,
+      ttsVoice,
+      waitForChat,
+    ]
   );
   const [awaitingRequests, setAwaitingRequests] = useState<ActionMessage[]>([]);
   const waitForRequest = useCallback(
@@ -352,26 +387,101 @@ const Chat: FC<ComponentProcessProps> = ({ id }) => {
   );
   const isResponding = responsingToChat || isWritingMessage;
   const canSend = input && !isResponding;
-  const showSettings =
-    messages.length === 1 && ["OpenAI", "WebLLM"].includes(name);
   const { contextMenu } = useMenu();
+  const [ttsVoices, setTTSVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const hasWebGPU = useWebGPUCheck();
   const { onContextMenuCapture } = useMemo(
     () =>
       contextMenu?.(() =>
-        showSettings
+        messages.length === 1
           ? [
               {
-                action: () => {
-                  // eslint-disable-next-line no-alert
-                  setSystemPrompt(prompt("System Prompt") || "");
-                },
-                label: "Set System Prompt",
+                label: "Set AI Engine",
+                menu: [
+                  "HuggingFace",
+                  "OpenAI",
+                  ...(hasWebGPU ? ["WebLLM [RedPajama 3B]"] : []),
+                  ...(hasWebGPU ? ["WebLLM [Vicuna 7B]"] : []),
+                ].map((engineName) => ({
+                  action: () => {
+                    setAiApi(
+                      `${engineName}:${
+                        engineName.startsWith("WebLLM")
+                          ? ""
+                          : // eslint-disable-next-line no-alert
+                            prompt("API Key") || ""
+                      }`
+                    );
+
+                    close(id);
+                    setTimeout(
+                      () => open(id.split(PROCESS_DELIMITER)[0]),
+                      TRANSITIONS_IN_MILLISECONDS.WINDOW * 1.5
+                    );
+                  },
+                  checked: name === engineName,
+                  label: engineName,
+                })),
               },
+              ...(name === "OpenAI"
+                ? [
+                    {
+                      action: () => {
+                        // eslint-disable-next-line no-alert
+                        setSystemPrompt(prompt("System Prompt") || "");
+                      },
+                      label: "Set System Prompt",
+                    },
+                  ]
+                : []),
+              ...(ttsVoices.length > 0
+                ? [
+                    {
+                      label: "Set Text-to-Speech",
+                      menu: ttsVoices.map((voice) => ({
+                        action: () => {
+                          setTTSVoice(voice);
+                          speakMessage(messages[0].text, voice);
+                        },
+                        checked: voice === ttsVoice,
+                        label: voice.name,
+                      })),
+                    },
+                  ]
+                : []),
             ]
           : []
       ),
-    [contextMenu, showSettings]
+    [
+      close,
+      contextMenu,
+      hasWebGPU,
+      id,
+      messages,
+      name,
+      open,
+      setAiApi,
+      speakMessage,
+      ttsVoice,
+      ttsVoices,
+    ]
   );
+  const resetChat = useCallback(() => {
+    setMessages((currentMessages) => [currentMessages[0]]);
+    AI?.reset?.();
+  }, [AI]);
+
+  useEffect(() => {
+    if (AI && "speechSynthesis" in window) {
+      const voices = window.speechSynthesis.getVoices();
+
+      if (voices.length === 0) {
+        setTimeout(() => setTTSVoices(window.speechSynthesis.getVoices()), 500);
+      } else {
+        setTTSVoices(voices);
+      }
+    }
+  }, [AI]);
 
   useEffect(() => {
     if (name) {
@@ -386,19 +496,17 @@ const Chat: FC<ComponentProcessProps> = ({ id }) => {
   }, [messages]);
 
   useEffect(() => {
-    let cleanUp: (() => void) | undefined;
-
-    if (initRef.current) {
-      cleanUp = () => AI?.destroy?.();
-    } else if (AI) {
+    if (AI && !initRef.current) {
       initRef.current = true;
 
       AI.init().then(() => addMessage(AI.greeting));
       inputRef.current?.focus(PREVENT_SCROLL);
     }
 
-    return cleanUp;
-  }, [AI, addMessage, apiKey]);
+    return () => {
+      if (initRef.current) AI?.destroy?.();
+    };
+  }, [AI, addMessage]);
 
   useEffect(() => {
     if (
@@ -419,10 +527,17 @@ const Chat: FC<ComponentProcessProps> = ({ id }) => {
 
   return (
     <StyledChat {...useFileDrop({ id })}>
-      {showSettings && (
+      {messages.length === 1 ? (
         <Button onClick={onContextMenuCapture}>
           <Settings />
         </Button>
+      ) : (
+        messages.length > 1 &&
+        !isResponding && (
+          <Button className="sub-margin" onClick={resetChat} title="Reset Chat">
+            <Reset />
+          </Button>
+        )
       )}
       <ul ref={messagesRef}>
         {messages.map(({ command, image, text, type, writing }, messageId) => {

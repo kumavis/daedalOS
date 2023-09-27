@@ -20,9 +20,8 @@ const StartButton: FC<StartButtonProps> = ({
     const preloadedLinks = [
       ...document.querySelectorAll("link[rel=preload]"),
     ] as HTMLLinkElement[];
-    const { default: startMenuIcons } = await import(
-      "public/.index/startMenuIcons.json"
-    );
+    const startMenuIcons = (await import("public/.index/startMenuIcons.json"))
+      .default;
 
     startMenuIcons?.forEach((icon) => {
       const link = document.createElement(
@@ -64,7 +63,14 @@ const StartButton: FC<StartButtonProps> = ({
   return (
     <StyledStartButton
       $active={startMenuVisible}
-      onClick={() => toggleStartMenu()}
+      onClick={async ({ ctrlKey, shiftKey }) => {
+        if (ctrlKey && shiftKey) {
+          const { default: spawnSheep } = await import("utils/spawnSheep");
+
+          spawnSheep();
+        }
+        toggleStartMenu();
+      }}
       onMouseOver={preloaded ? undefined : preloadIcons}
       {...label("Start")}
       {...useTaskbarContextMenu(true)}

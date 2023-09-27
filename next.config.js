@@ -24,14 +24,10 @@ const nextConfig = {
   devIndicators: {
     buildActivityPosition: "top-right",
   },
-  experimental: {
-    legacyBrowsers: false,
-    swcFileReading: true,
-  },
   optimizeFonts: false,
   productionBrowserSourceMaps: false,
   reactStrictMode: true,
-  swcMinify: !isProduction,
+  swcMinify: true,
   webpack: (config) => {
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(/node:/, (resource) => {
@@ -53,6 +49,13 @@ const nextConfig = {
       test: /\.js\.raw$/,
       type: 'asset/source'
     });
+
+    config.resolve.fallback = config.resolve.fallback || {};
+    config.resolve.fallback.module = false;
+    config.resolve.fallback.perf_hooks = false;
+
+    config.module.parser.javascript = config.module.parser.javascript || {};
+    config.module.parser.javascript.dynamicImportFetchPriority = "high";
 
     return config;
   },

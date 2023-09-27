@@ -1,7 +1,10 @@
 const sizes = {
+  calendar: {
+    maxHeight: 357,
+  },
   clock: {
     fontSize: "12px",
-    width: "76px",
+    padding: 5,
   },
   contextMenu: {
     subMenuOffset: 3,

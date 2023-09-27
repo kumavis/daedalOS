@@ -5,23 +5,26 @@ import { FileSystemProvider } from "contexts/fileSystem";
 import { MenuProvider } from "contexts/menu";
 import { ProcessProvider } from "contexts/process";
 import { SessionProvider } from "contexts/session";
+import { ViewportProvider } from "contexts/viewport";
 import type { AppProps } from "next/app";
 
 const App = ({ Component, pageProps }: AppProps): React.ReactElement => (
-  <ProcessProvider>
-    <FileSystemProvider>
-      <SessionProvider>
-        <ErrorBoundary>
-          <Metadata />
-          <StyledApp>
-            <MenuProvider>
-              <Component {...pageProps} />
-            </MenuProvider>
-          </StyledApp>
-        </ErrorBoundary>
-      </SessionProvider>
-    </FileSystemProvider>
-  </ProcessProvider>
+  <ViewportProvider>
+    <ProcessProvider>
+      <FileSystemProvider>
+        <SessionProvider>
+          <ErrorBoundary>
+            <Metadata />
+            <StyledApp>
+              <MenuProvider>
+                <Component {...pageProps} />
+              </MenuProvider>
+            </StyledApp>
+          </ErrorBoundary>
+        </SessionProvider>
+      </FileSystemProvider>
+    </ProcessProvider>
+  </ViewportProvider>
 );
 
 export default App;

@@ -3,7 +3,8 @@ import { monacoExtensions } from "components/apps/MonacoEditor/extensions";
 import extensions from "components/system/Files/FileEntry/extensions";
 import type { FileInfo } from "components/system/Files/FileEntry/useFileInfo";
 import type { FileStat } from "components/system/Files/FileManager/functions";
-import { get9pModifiedTime } from "contexts/fileSystem/functions";
+import { get9pModifiedTime } from "contexts/fileSystem/core";
+import { isMountedFolder } from "contexts/fileSystem/functions";
 import type { RootFileSystem } from "contexts/fileSystem/useAsyncFs";
 import processDirectory from "contexts/process/directory";
 import ini from "ini";
@@ -96,7 +97,7 @@ export const getIconFromIni = (
     );
   });
 
-export const getDefaultFileViewer = (extension: string): string => {
+const getDefaultFileViewer = (extension: string): string => {
   if (AUDIO_FILE_EXTENSIONS.has(extension)) return "VideoPlayer";
   if (VIDEO_FILE_EXTENSIONS.has(extension)) return "VideoPlayer";
   if (IMAGE_FILE_EXTENSIONS.has(extension)) return "Photos";
@@ -128,9 +129,20 @@ export const getProcessByFileExtension = (extension: string): string => {
 
 export const getMimeType = (url: string): string => {
   switch (getExtension(url)) {
+    case ".ani":
+    case ".cur":
+    case ".ico":
+      return "image/vnd.microsoft.icon";
     case ".jpg":
     case ".jpeg":
       return "image/jpeg";
+    case ".json":
+      return "application/json";
+    case ".html":
+    case ".htm":
+    case ".whtml":
+      return "text/html";
+    case ".m3u":
     case ".m3u8":
       return "application/x-mpegURL";
     case ".m4v":
@@ -138,18 +150,33 @@ export const getMimeType = (url: string): string => {
     case ".mov":
     case ".mp4":
       return "video/mp4";
+    case ".mp3":
+      return "audio/mpeg";
     case ".oga":
       return "audio/ogg";
     case ".ogg":
     case ".ogm":
     case ".ogv":
       return "video/ogg";
+    case ".pdf":
+      return "application/pdf";
     case ".png":
       return "image/png";
+    case ".md":
+    case ".txt":
+      return "text/plain";
     case ".wav":
       return "audio/wav";
     case ".webm":
       return "video/webm";
+    case ".webp":
+      return "image/webp";
+    case ".xml":
+      return "application/xml";
+    case ".wsz":
+    case ".jsdos":
+    case ".zip":
+      return "application/zip";
     default:
       return "";
   }
@@ -163,7 +190,7 @@ export const getShortcutInfo = (contents: Buffer): FileInfo => {
       IconFile: icon = "",
       Type: type = "",
       URL: url = "",
-    },
+    } = {},
   } = (ini.parse(contents.toString()) || {}) as {
     InternetShortcut: InternetShortcut;
   };
@@ -240,7 +267,7 @@ export const getInfoWithoutExtension = (
   rootFs: RootFileSystem,
   path: string,
   isDirectory: boolean,
-  useNewFolderIcon: boolean,
+  hasNewFolderIcon: boolean,
   callback: (value: FileInfo) => void
 ): void => {
   if (isDirectory) {
@@ -251,10 +278,10 @@ export const getInfoWithoutExtension = (
     ): void =>
       callback({ getIcon, icon, pid: "FileExplorer", subIcons, url: path });
     const getFolderIcon = (): string => {
-      if (rootFs?.mntMap[path]?.getName() === "FileSystemAccess") {
+      if (isMountedFolder(rootFs?.mntMap[path])) {
         return MOUNTED_FOLDER_ICON;
       }
-      if (useNewFolderIcon) return NEW_FOLDER_ICON;
+      if (hasNewFolderIcon) return NEW_FOLDER_ICON;
       return FOLDER_ICON;
     };
     const folderIcon = getFolderIcon();
@@ -279,7 +306,7 @@ export const getInfoWithoutExtension = (
   }
 };
 
-const getFirstAniImage = async (
+export const getFirstAniImage = async (
   imageBuffer: Buffer
 ): Promise<Buffer | undefined> => {
   const { parseAni } = await import("ani-cursor/dist/parser");
@@ -541,6 +568,10 @@ export const getInfoWithExtension = (
             containerElement.style.padding = "32px";
             containerElement.style.backgroundColor = "#fff";
             containerElement.style.zIndex = "-1";
+            containerElement.style.overflow = "hidden";
+            containerElement.style.opacity = "0";
+            containerElement.style.userSelect = "none";
+            containerElement.style.webkitUserSelect = "none";
 
             containerElement.innerHTML = contents.toString();
 
@@ -551,6 +582,9 @@ export const getInfoWithExtension = (
             try {
               documentImage = await htmlToImage?.toPng(containerElement, {
                 skipAutoScale: true,
+                style: {
+                  opacity: "1",
+                },
               });
             } catch {
               // Ignore failure to captrure
@@ -745,7 +779,7 @@ const canvasContexts = Object.create(null) as Record<
   CanvasRenderingContext2D
 >;
 
-const measureText = (
+export const measureText = (
   text: string,
   fontSize: string,
   fontFamily: string

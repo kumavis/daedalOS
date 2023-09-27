@@ -32,26 +32,26 @@ const getYouTubeUrlId = (url) => {
   return "";
 };
 
-const getPublicDirectoryIcons = (directory) => {
-  const isDesktop = directory === DESKTOP_PATH;
-  const baseDirectory = join("./public", directory);
+const getPublicDirectoryIcons = (directory) => [
+  ...new Set(
+    readdirSync(join("./public", directory)).reduce((icons, file) => {
+      if (extname(file).toLowerCase() === ".url") {
+        const {
+          InternetShortcut: {
+            BaseURL: pid = "",
+            IconFile: icon = "",
+            URL: url = "",
+          },
+        } = parse(
+          readFileSync(join(join("./public", directory), file)).toString()
+        );
+        const isVideo = pid === "VideoPlayer";
 
-  return readdirSync(baseDirectory).reduce((icons, file) => {
-    if (extname(file) === ".url") {
-      const {
-        InternetShortcut: {
-          BaseURL: pid = "",
-          IconFile: icon = "",
-          URL: url = "",
-        },
-      } = parse(readFileSync(join(baseDirectory, file)).toString());
+        if (isVideo && url) icons.push(encodeURI(VLC_SUBICON));
 
-      if (icon) icons.push(encodeURI(icon));
-
-      if (isDesktop) {
-        if (pid === "VideoPlayer") {
-          if (!icons.includes(VLC_SUBICON)) icons.push(encodeURI(VLC_SUBICON));
-          if (isYouTubeUrl(url)) {
+        if (icon) icons.push(encodeURI(icon));
+        else {
+          if (isVideo && isYouTubeUrl(url)) {
             const iconFileName = `/${getYouTubeUrlId(
               url
             )}${ICON_CACHE_EXTENSION}`;
@@ -61,24 +61,24 @@ const getPublicDirectoryIcons = (directory) => {
             ) {
               icons.push(encodeURI(`${YT_ICON_CACHE}${iconFileName}`));
             }
+          } else {
+            const iconPath = url || `${directory}/${file}`;
+            const iconCacheFileName = `${iconPath}${ICON_CACHE_EXTENSION}`;
+
+            if (
+              extname(iconPath) &&
+              existsSync(join("./public", ICON_CACHE, `${iconCacheFileName}`))
+            ) {
+              icons.push(encodeURI(`${ICON_CACHE}${iconCacheFileName}`));
+            }
           }
         }
-
-        const iconPath = url || `${directory}/${file}`;
-        const iconCacheFileName = `${iconPath}${ICON_CACHE_EXTENSION}`;
-
-        if (
-          extname(iconPath) &&
-          existsSync(join("./public", ICON_CACHE, `${iconCacheFileName}`))
-        ) {
-          icons.push(encodeURI(`${ICON_CACHE}${iconCacheFileName}`));
-        }
       }
-    }
 
-    return icons;
-  }, []);
-};
+      return icons;
+    }, [])
+  ),
+];
 
 writeFileSync(
   "./public/.index/desktopIcons.json",

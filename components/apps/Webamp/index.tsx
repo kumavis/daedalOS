@@ -1,3 +1,4 @@
+import StyledWebamp from "components/apps/Webamp/StyledWebamp";
 import {
   cleanBufferOnSkinLoad,
   focusWindow,
@@ -5,7 +6,6 @@ import {
   tracksFromPlaylist,
   unFocus,
 } from "components/apps/Webamp/functions";
-import StyledWebamp from "components/apps/Webamp/StyledWebamp";
 import useWebamp from "components/apps/Webamp/useWebamp";
 import type { ComponentProcessProps } from "components/system/Apps/RenderComponent";
 import useFocusable from "components/system/Window/useFocusable";

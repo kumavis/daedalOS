@@ -1,8 +1,11 @@
+import { getFirstAniImage } from "components/system/Files/FileEntry/functions";
+import { useFileSystem } from "contexts/fileSystem";
 import { useProcesses } from "contexts/process";
 import { useSession } from "contexts/session";
 import Head from "next/head";
+import { extname } from "path";
 import desktopIcons from "public/.index/desktopIcons.json";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   FAVICON_BASE_PATH,
   HIGH_PRIORITY_ELEMENT,
@@ -12,7 +15,7 @@ import {
   PACKAGE_DATA,
   USER_ICON_PATH,
 } from "utils/constants";
-import { getDpi, imageSrc, imageSrcs } from "utils/functions";
+import { getDpi, imageSrc, imageSrcs, imageToBufferUrl } from "utils/functions";
 
 const { alias, description } = PACKAGE_DATA;
 
@@ -32,7 +35,6 @@ const PreloadDesktopIcons: FC = () => (
           href={isStaticIcon ? icon : undefined}
           imageSrcSet={isStaticIcon ? undefined : imageSrcs(icon, 48, ".webp")}
           rel="preload"
-          type={isCacheIcon ? undefined : "image/webp"}
           {...HIGH_PRIORITY_ELEMENT}
         />
       );
@@ -40,10 +42,14 @@ const PreloadDesktopIcons: FC = () => (
   </>
 );
 
+const MemoizedPreloadDesktopIcons = memo(PreloadDesktopIcons);
+
 const Metadata: FC = () => {
   const [title, setTitle] = useState(alias);
   const [favIcon, setFavIcon] = useState("");
-  const { foregroundId } = useSession();
+  const { readFile } = useFileSystem();
+  const [customCursor, setCustomCursor] = useState("");
+  const { cursor, foregroundId } = useSession();
   const { processes: { [foregroundId]: process } = {} } = useProcesses();
   const { icon: processIcon, title: processTitle } = process || {};
   const resetFaviconAndTitle = useCallback((): void => {
@@ -61,6 +67,18 @@ const Metadata: FC = () => {
         : imageSrc(favIcon, 16, getDpi(), ".webp").split(" ")[0],
     [favIcon]
   );
+  const getCursor = useCallback(
+    async (path: string) => {
+      const imageBuffer = await readFile(path);
+      const image =
+        extname(path) === ".ani"
+          ? await getFirstAniImage(imageBuffer)
+          : imageBuffer;
+
+      return image ? imageToBufferUrl(path, image) : "";
+    },
+    [readFile]
+  );
 
   useEffect(() => {
     if (processIcon || processTitle) {
@@ -68,7 +86,7 @@ const Metadata: FC = () => {
 
       if (title !== documentTitle) setTitle(documentTitle);
       if (favIcon !== processIcon || !favIcon) {
-        setFavIcon(processIcon || FAVICON_BASE_PATH);
+        setFavIcon(encodeURI(processIcon) || FAVICON_BASE_PATH);
       }
     } else {
       resetFaviconAndTitle();
@@ -106,6 +124,10 @@ const Metadata: FC = () => {
     };
   }, [resetFaviconAndTitle]);
 
+  useEffect(() => {
+    if (cursor) getCursor(cursor).then(setCustomCursor);
+  }, [cursor, getCursor]);
+
   return (
     <Head>
       <title>{title}</title>
@@ -117,9 +139,12 @@ const Metadata: FC = () => {
         name="viewport"
       />
       <meta content={description} name="description" />
-      <PreloadDesktopIcons />
+      <MemoizedPreloadDesktopIcons />
+      {customCursor && (
+        <style>{`*, *::before, *::after { cursor: url(${customCursor}), default !important; }`}</style>
+      )}
     </Head>
   );
 };
 
-export default Metadata;
+export default memo(Metadata);

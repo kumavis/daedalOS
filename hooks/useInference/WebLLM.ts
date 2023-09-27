@@ -4,12 +4,20 @@ import type { Engine } from "hooks/useInference/useInference";
 type Log = { message: string; type: string };
 type WorkerMessage = { data: Log | string };
 
+declare global {
+  interface Window {
+    webLLM?: Record<string, Worker>;
+  }
+}
+
 const DEFAULT_GREETING = {
   text: "Hello, I am an AI assistant. How can I help you today?",
   type: "assistant",
 } as Message;
 
 export class WebLLM implements Engine {
+  private model = "";
+
   private worker?: Worker = undefined;
 
   private isChatting = false;
@@ -17,16 +25,23 @@ export class WebLLM implements Engine {
   public greeting = DEFAULT_GREETING;
 
   public destroy(): void {
-    globalThis.tvmjsGlobalEnv?.asyncOnReset();
-    this.worker?.terminate();
+    this.reset();
+  }
+
+  public constructor(model: string) {
+    this.model = model;
   }
 
   public async init(): Promise<void> {
-    this.worker = new Worker(
-      new URL("hooks/useInference/WebLLM.worker.ts", import.meta.url),
-      { name: "WebLLM" }
-    );
-    this.worker.postMessage("init");
+    window.webLLM = window.webLLM || {};
+    window.webLLM[this.model] =
+      window.webLLM[this.model] ||
+      new Worker(
+        new URL("hooks/useInference/WebLLM.worker.ts", import.meta.url),
+        { name: this.model, type: "module" }
+      );
+    this.worker = window.webLLM[this.model];
+    this.worker.postMessage({ model: this.model, type: "init" });
 
     // eslint-disable-next-line unicorn/no-useless-promise-resolve-reject
     return Promise.resolve();
@@ -48,7 +63,9 @@ export class WebLLM implements Engine {
       }
     }
 
-    requestAnimationFrame(() => this.worker?.postMessage(message));
+    setTimeout(() => {
+      this.worker?.postMessage({ prompt: message, type: "chat" });
+    }, 100);
 
     return new Promise((resolve) => {
       this.worker?.addEventListener("message", ({ data }: WorkerMessage) => {
@@ -57,7 +74,7 @@ export class WebLLM implements Engine {
         if (typeof data === "string") {
           resolve(data);
           logger("", "");
-        } else {
+        } else if (typeof data === "object") {
           logger(data.type, data.message);
         }
       });
@@ -87,6 +104,10 @@ export class WebLLM implements Engine {
 
     // eslint-disable-next-line unicorn/no-useless-promise-resolve-reject
     return Promise.resolve("");
+  }
+
+  public reset(): void {
+    this.worker?.postMessage({ type: "reset" });
   }
 
   public async summarization(_text: string): Promise<string> {

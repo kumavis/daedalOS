@@ -57,13 +57,15 @@ export const COMPLETE_ACTION: Record<string, CompleteAction> = {
   UPDATE_URL: "updateUrl",
 };
 
+export type NewPath = (
+  fileName: string,
+  buffer?: Buffer,
+  completeAction?: CompleteAction
+) => Promise<string>;
+
 export type FolderActions = {
-  addToFolder: () => void;
-  newPath: (
-    path: string,
-    buffer?: Buffer,
-    completeAction?: CompleteAction
-  ) => Promise<void>;
+  addToFolder: () => Promise<string[]>;
+  newPath: NewPath;
   pasteToFolder: () => void;
   resetFiles: () => void;
   sortByOrder: [SortByOrder, SetSortBy];
@@ -292,8 +294,9 @@ const useFolder = (
   );
   const deleteLocalPath = useCallback(
     async (path: string): Promise<void> => {
-      await deletePath(path);
-      updateFolder(directory, undefined, basename(path));
+      if (await deletePath(path)) {
+        updateFolder(directory, undefined, basename(path));
+      }
     },
     [deletePath, directory, updateFolder]
   );
@@ -333,8 +336,7 @@ const useFolder = (
         }`
       );
 
-      if (!(await exists(renamedPath))) {
-        await rename(path, renamedPath);
+      if (!(await exists(renamedPath)) && (await rename(path, renamedPath))) {
         updateFolder(directory, renamedPath, path);
       }
 
@@ -356,7 +358,7 @@ const useFolder = (
       name: string,
       buffer?: Buffer,
       completeAction?: CompleteAction
-    ): Promise<void> => {
+    ): Promise<string> => {
       const uniqueName = await createPath(name, directory, buffer);
 
       if (uniqueName && !uniqueName.includes("/")) {
@@ -368,6 +370,8 @@ const useFolder = (
           focusEntry(uniqueName);
         }
       }
+
+      return uniqueName;
     },
     [blurEntry, createPath, directory, focusEntry, setRenaming, updateFolder]
   );
@@ -442,7 +446,7 @@ const useFolder = (
     async (paths: string[]): Promise<void> => {
       const zipFiles = await createZipFile(paths);
       const zipEntries = Object.entries(zipFiles);
-      const [[path, file]] = zipEntries;
+      const [[path, file]] = zipEntries.length === 0 ? [["", ""]] : zipEntries;
       const singleParentEntry = zipEntries.length === 1;
 
       if (singleParentEntry && extname(path)) {
@@ -543,9 +547,9 @@ const useFolder = (
         uniquePath = await createPath(newBasePath, directory);
 
         await Promise.all(
-          (
-            await readdir(entry)
-          ).map((dirEntry) => copyFiles(join(entry, dirEntry), uniquePath))
+          (await readdir(entry)).map((dirEntry) =>
+            copyFiles(join(entry, dirEntry), uniquePath)
+          )
         );
       } else {
         uniquePath = await createPath(

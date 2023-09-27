@@ -39,7 +39,7 @@ export const DEFAULT_WALLPAPER_FIT: WallpaperFit = "fill";
 
 export const THIN_SCROLLBAR_WIDTH = 13;
 
-export const BASE_CLOCK_WIDTH = 68;
+export const CLOCK_CANVAS_BASE_WIDTH = 68;
 
 export const SMALLEST_PNG_SIZE = 51;
 
@@ -52,15 +52,25 @@ export const DEFAULT_MAPPED_NAME = "Share";
 
 export const FOCUSABLE_ELEMENT = { tabIndex: -1 };
 
+export const DIV_BUTTON_PROPS = {
+  as: "div",
+  role: "button",
+  ...FOCUSABLE_ELEMENT,
+};
+
 export const FS_HANDLES = "FileSystemAccessHandles";
 
 export const HOME = "/Users/Public";
 
 export const PICTURES_FOLDER = `${HOME}/Pictures`;
 
+export const INDEX_FILE = "/index.html";
+
 export const PROMPT_FILE = "prompts.json";
 
 export const SLIDESHOW_FILE = "slideshow.json";
+
+export const SLIDESHOW_TIMEOUT_IN_MILLISECONDS = 15000;
 
 export const ICON_GIF_SECONDS = 2;
 
@@ -114,6 +124,8 @@ export const UNSUPPORTED_BACKGROUND_EXTENSIONS = new Set([
   ".qoi",
   ".svg",
 ]);
+
+export const CURSOR_FILE_EXTENSIONS = new Set([".ani", ".cur"]);
 
 export const EDITABLE_IMAGE_FILE_EXTENSIONS = new Set([
   ".bmp",
@@ -256,12 +268,14 @@ export const SYSTEM_SHORTCUT_DIRECTORIES = new Set([DESKTOP_PATH]);
 export const TRANSITIONS_IN_MILLISECONDS = {
   DOUBLE_CLICK: 500,
   LONG_PRESS: 500,
-  START_MENU: 400,
+  MOUSE_IN_OUT: 300,
+  TASKBAR_ITEM: 400,
   WINDOW: 250,
 };
 
 export const TRANSITIONS_IN_SECONDS = {
-  START_MENU: TRANSITIONS_IN_MILLISECONDS.START_MENU / MILLISECONDS_IN_SECOND,
+  TASKBAR_ITEM:
+    TRANSITIONS_IN_MILLISECONDS.TASKBAR_ITEM / MILLISECONDS_IN_SECOND,
   WINDOW: TRANSITIONS_IN_MILLISECONDS.WINDOW / MILLISECONDS_IN_SECOND,
 };
 
@@ -286,6 +300,7 @@ export const VIDEO_FILE_EXTENSIONS = new Set([
 
 export const DYNAMIC_EXTENSION = new Set([
   ...AUDIO_FILE_EXTENSIONS,
+  ...AUDIO_PLAYLIST_EXTENSIONS,
   ...IMAGE_FILE_EXTENSIONS,
   ...TIFF_IMAGE_FORMATS,
   ...VIDEO_FILE_EXTENSIONS,
@@ -370,6 +385,7 @@ export const PACKAGE_DATA = {
   author: {
     email: "dustinbrett@gmail.com",
     name: "Dustin Brett",
+    npub: "npub10uc7hg6wdxhhd7ee8x9c5lr9d0ux7272rv2m0mc03ds54q7quxjss02r3p",
     url: "https://dustinbrett.com",
   },
   description: "Desktop environment in the browser",
@@ -388,6 +404,3 @@ export const HIGH_PRIORITY_REQUEST = { priority: "high" } as RequestInit;
 export const HIGH_PRIORITY_ELEMENT = {
   fetchpriority: "high",
 } as React.HTMLAttributes<HTMLElement>;
-
-export const isFileSystemMappingSupported = (): boolean =>
-  typeof FileSystemHandle === "function" && "showDirectoryPicker" in window;

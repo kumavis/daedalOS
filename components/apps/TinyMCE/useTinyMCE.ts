@@ -1,9 +1,10 @@
-import { config, DEFAULT_SAVE_PATH } from "components/apps/TinyMCE/config";
+import { DEFAULT_SAVE_PATH, config } from "components/apps/TinyMCE/config";
 import {
   draggableEditor,
   setReadOnlyMode,
 } from "components/apps/TinyMCE/functions";
 import type { IRTFJS } from "components/apps/TinyMCE/types";
+import type { ContainerHookProps } from "components/system/Apps/AppContainer";
 import {
   getModifiedTime,
   getProcessByFileExtension,
@@ -21,12 +22,12 @@ import { getExtension, haltEvent, loadFiles } from "utils/functions";
 
 type OptionSetter = <K, T>(name: K, value: T) => void;
 
-const useTinyMCE = (
-  id: string,
-  url: string,
-  containerRef: React.MutableRefObject<HTMLDivElement | null>,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>
-): void => {
+const useTinyMCE = ({
+  containerRef,
+  id,
+  setLoading,
+  url,
+}: ContainerHookProps): void => {
   const {
     open,
     processes: { [id]: { libs = [] } = {} } = {},
@@ -97,6 +98,10 @@ const useTinyMCE = (
 
       linksToProcesses();
       updateTitle(url);
+
+      if (editor.iframeElement?.contentDocument) {
+        editor.iframeElement.contentDocument.documentElement.scrollTop = 0;
+      }
     }
   }, [editor, linksToProcesses, readFile, updateTitle, url]);
 

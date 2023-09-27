@@ -23,6 +23,7 @@ import {
   displayLicense,
   displayVersion,
 } from "components/apps/Terminal/useTerminal";
+import { resourceAliasMap } from "components/system/Dialogs/Run";
 import extensions from "components/system/Files/FileEntry/extensions";
 import {
   getModifiedTime,
@@ -45,10 +46,14 @@ import {
   MILLISECONDS_IN_SECOND,
   PACKAGE_DATA,
   SHORTCUT_EXTENSION,
-  isFileSystemMappingSupported,
 } from "utils/constants";
 import { transcode } from "utils/ffmpeg";
-import { getExtension, getTZOffsetISOString, loadFiles } from "utils/functions";
+import {
+  getExtension,
+  getTZOffsetISOString,
+  isFileSystemMappingSupported,
+  loadFiles,
+} from "utils/functions";
 import { convert } from "utils/imagemagick";
 import { getIpfsFileName, getIpfsResource } from "utils/ipfs";
 import { fullSearch } from "utils/search";
@@ -283,8 +288,7 @@ const useCommandInterpreter = (
           if (commandPath) {
             const fullPath = await getFullPath(commandPath);
 
-            if (await exists(fullPath)) {
-              await deletePath(fullPath);
+            if ((await exists(fullPath)) && (await deletePath(fullPath))) {
               updateFile(fullPath, true);
             }
           }
@@ -621,9 +625,10 @@ const useCommandInterpreter = (
                 );
               }
 
-              await rename(fullSourcePath, fullDestinationPath);
-              updateFile(fullSourcePath, true);
-              updateFile(fullDestinationPath);
+              if (await rename(fullSourcePath, fullDestinationPath)) {
+                updateFile(fullSourcePath, true);
+                updateFile(fullDestinationPath);
+              }
             } else {
               localEcho?.println(SYNTAX_ERROR);
             }
@@ -864,9 +869,22 @@ const useCommandInterpreter = (
           localEcho?.println(displayVersion());
           break;
         case "wapm":
-        case "wax":
-          if (localEcho) await loadWapm(commandArgs, localEcho);
+        case "wax": {
+          if (!localEcho) break;
+
+          const [file] = commandArgs;
+          const fullSourcePath = await getFullPath(file);
+
+          await loadWapm(
+            commandArgs,
+            localEcho,
+            fullSourcePath.endsWith(".wasm") && (await exists(fullSourcePath))
+              ? await readFile(fullSourcePath)
+              : undefined
+          );
+
           break;
+        }
         case "weather":
         case "wttr": {
           const response = await fetch(
@@ -921,9 +939,10 @@ const useCommandInterpreter = (
         }
         default:
           if (baseCommand) {
-            const pid = Object.keys(processDirectory).find(
-              (process) => process.toLowerCase() === lcBaseCommand
-            );
+            const pid =
+              Object.keys(processDirectory).find(
+                (process) => process.toLowerCase() === lcBaseCommand
+              ) || resourceAliasMap[lcBaseCommand];
 
             if (pid) {
               const [file] = commandArgs;
@@ -945,7 +964,11 @@ const useCommandInterpreter = (
                   extensions[fileExtension] || {};
 
                 if (extCommand) {
-                  await commandInterpreter(`${extCommand} ${baseCommand}`);
+                  await commandInterpreter(
+                    `${extCommand} ${baseCommand}${
+                      commandArgs.length > 0 ? ` ${commandArgs.join(" ")}` : ""
+                    }`
+                  );
                 } else {
                   const fullFilePath = baseFileExists
                     ? baseCommand

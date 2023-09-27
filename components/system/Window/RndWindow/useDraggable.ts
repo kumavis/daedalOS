@@ -1,11 +1,11 @@
+import useMinMaxRef from "components/system/Window/RndWindow/useMinMaxRef";
+import type { Size } from "components/system/Window/RndWindow/useResizable";
 import {
+  WINDOW_OFFSCREEN_BUFFER_PX,
   cascadePosition,
   centerPosition,
   isWindowOutsideBounds,
-  WINDOW_OFFSCREEN_BUFFER_PX,
 } from "components/system/Window/functions";
-import useMinMaxRef from "components/system/Window/RndWindow/useMinMaxRef";
-import type { Size } from "components/system/Window/RndWindow/useResizable";
 import { useProcesses } from "contexts/process";
 import { useSession } from "contexts/session";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";

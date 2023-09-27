@@ -10,10 +10,9 @@ import {
 } from "components/system/StartMenu/Sidebar/SidebarIcons";
 import StyledSidebar from "components/system/StartMenu/Sidebar/StyledSidebar";
 import { useFileSystem } from "contexts/fileSystem";
-import { resetStorage } from "contexts/fileSystem/functions";
 import { useProcesses } from "contexts/process";
 import { useSession } from "contexts/session";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "styled-components";
 import { HOME, TASKBAR_HEIGHT } from "utils/constants";
 import { haltEvent, viewHeight } from "utils/functions";
@@ -40,6 +39,7 @@ const Sidebar: FC<SidebarProps> = ({ height }) => {
   const { setHaltSession } = useSession();
   const [collapsed, setCollapsed] = useState(true);
   const expandTimer = useRef<number>();
+  const sidebarRef = useRef<HTMLElement>(null);
   const clearTimer = (): void => {
     if (expandTimer.current) clearTimeout(expandTimer.current);
   };
@@ -107,7 +107,10 @@ const Sidebar: FC<SidebarProps> = ({ height }) => {
     {
       action: () => {
         setHaltSession(true);
-        resetStorage(rootFs).finally(() => window.location.reload());
+
+        import("contexts/fileSystem/functions").then(({ resetStorage }) =>
+          resetStorage(rootFs).finally(() => window.location.reload())
+        );
       },
       icon: <Power />,
       name: "Power",
@@ -119,10 +122,19 @@ const Sidebar: FC<SidebarProps> = ({ height }) => {
 
   return (
     <StyledSidebar
+      ref={sidebarRef}
       className={collapsed ? "collapsed" : undefined}
-      onClick={() => {
+      onClick={({ target }) => {
         clearTimer();
-        setCollapsed((collapsedState) => !collapsedState);
+
+        if (
+          target instanceof HTMLElement &&
+          (target === sidebarRef.current ||
+            (sidebarRef.current?.contains(target) &&
+              target.textContent === "START"))
+        ) {
+          setCollapsed((collapsedState) => !collapsedState);
+        }
       }}
       onContextMenu={haltEvent}
       onMouseEnter={() => {
@@ -140,4 +152,4 @@ const Sidebar: FC<SidebarProps> = ({ height }) => {
   );
 };
 
-export default Sidebar;
+export default memo(Sidebar);

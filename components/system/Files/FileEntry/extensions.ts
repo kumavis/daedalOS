@@ -74,7 +74,7 @@ const types = {
   },
   Music: {
     icon: "audio",
-    process: ["Webamp"],
+    process: ["Webamp", "VideoPlayer"],
   },
   NoodJs: {
     icon: "emulator",
@@ -100,6 +100,12 @@ const types = {
     process: ["Photos", ...TEXT_EDITORS],
     type: "Scalable Vector Graphics File",
   },
+  WasmFile: {
+    command: "wapm",
+    icon: "wapm",
+    process: ["Terminal"],
+    type: "WebAssembly Module File",
+  },
   WinampSkin: {
     icon: "audio",
     process: ["Webamp", "FileExplorer"],
@@ -122,6 +128,7 @@ const extensions: Record<string, Extension> = {
   ".asx": types.AudioPlaylist,
   ".bin": types.DiscImage,
   ".eval": types.NoodJs,
+  ".dsk": types.DiscImage,
   ".exe": types.Application,
   ".htm": types.HtmlDocument,
   ".html": types.HtmlDocument,
@@ -141,6 +148,7 @@ const extensions: Record<string, Extension> = {
   ".svg": types.SvgFile,
   ".swf": types.ShockwaveFlash,
   ".ttf": types.Font,
+  ".wasm": types.WasmFile,
   ".whtml": types.WysiwygHtmlDocument,
   ".woff": types.Font,
   ".wsz": types.WinampSkin,

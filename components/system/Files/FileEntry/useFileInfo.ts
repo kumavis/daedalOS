@@ -3,6 +3,7 @@ import {
   getInfoWithoutExtension,
 } from "components/system/Files/FileEntry/functions";
 import { useFileSystem } from "contexts/fileSystem";
+import { isMountedFolder } from "contexts/fileSystem/functions";
 import { useEffect, useRef, useState } from "react";
 import { MOUNTABLE_EXTENSIONS } from "utils/constants";
 import { getExtension } from "utils/functions";
@@ -19,8 +20,8 @@ export type FileInfo = {
 
 const useFileInfo = (
   path: string,
-  isDirectory: boolean,
-  useNewFolderIcon = false
+  isDirectory = false,
+  hasNewFolderIcon = false
 ): [FileInfo, React.Dispatch<React.SetStateAction<FileInfo>>] => {
   const [info, setInfo] = useState<FileInfo>(() => ({
     icon: "",
@@ -44,21 +45,21 @@ const useFileInfo = (
         !extension ||
         (isDirectory &&
           !MOUNTABLE_EXTENSIONS.has(extension) &&
-          rootFs.mntMap[path]?.getName() !== "FileSystemAccess")
+          !isMountedFolder(rootFs.mntMap[path]))
       ) {
         getInfoWithoutExtension(
           fs,
           rootFs,
           path,
           isDirectory,
-          useNewFolderIcon,
+          hasNewFolderIcon,
           updateInfo
         );
       } else {
         getInfoWithExtension(fs, path, extension, updateInfo);
       }
     }
-  }, [fs, isDirectory, path, rootFs, useNewFolderIcon]);
+  }, [fs, hasNewFolderIcon, isDirectory, path, rootFs]);
 
   return [info, setInfo];
 };

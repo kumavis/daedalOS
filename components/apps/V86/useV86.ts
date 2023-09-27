@@ -12,9 +12,10 @@ import type {
   V86Starter,
 } from "components/apps/V86/types";
 import useV86ScreenSize from "components/apps/V86/useV86ScreenSize";
+import type { ContainerHookProps } from "components/system/Apps/AppContainer";
 import useTitle from "components/system/Window/useTitle";
 import { useFileSystem } from "contexts/fileSystem";
-import { fs9pV4ToV3 } from "contexts/fileSystem/functions";
+import { fs9pV4ToV3 } from "contexts/fileSystem/core";
 import { useProcesses } from "contexts/process";
 import { useSession } from "contexts/session";
 import { basename, dirname, join } from "path";
@@ -33,13 +34,17 @@ import {
   loadFiles,
 } from "utils/functions";
 
-const useV86 = (
-  id: string,
-  url: string,
-  containerRef: React.MutableRefObject<HTMLDivElement | null>,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
-  loading: boolean
-): void => {
+if (typeof window !== "undefined") {
+  window.DEBUG = false;
+}
+
+const useV86 = ({
+  containerRef,
+  id,
+  loading,
+  setLoading,
+  url,
+}: ContainerHookProps): void => {
   const {
     processes: { [id]: process },
   } = useProcesses();
@@ -189,8 +194,9 @@ const useV86 = (
   useEffect(() => {
     const isActiveInstance = foregroundId === id;
 
-    Object.values(emulator).forEach((emulatorInstance) =>
-      emulatorInstance?.keyboard_set_status(isActiveInstance)
+    Object.values(emulator).forEach(
+      (emulatorInstance) =>
+        emulatorInstance?.keyboard_set_status(isActiveInstance)
     );
   }, [emulator, foregroundId, id]);
 

@@ -17,19 +17,16 @@ type StyledIconProps = Pick<IconProps, "$eager" | "$moving"> & {
   $width: number;
 };
 
-const StyledIcon = styled.img
-  .withConfig({
-    shouldForwardProp: (prop, defaultValidatorFn) =>
-      ["fetchpriority"].includes(prop) || defaultValidatorFn(prop),
-  })
-  .attrs<StyledIconProps>(({ $eager = false, $height, $width }) => ({
+const StyledIcon = styled.img.attrs<StyledIconProps>(
+  ({ $eager = false, $height, $width }) => ({
     decoding: "async",
     draggable: false,
     fetchpriority: $eager ? "high" : undefined,
     height: $height,
     loading: $eager ? "eager" : "lazy",
     width: $width,
-  }))<StyledIconProps>`
+  })
+)<StyledIconProps>`
   aspect-ratio: 1;
   left: ${({ $offset }) => $offset || undefined};
   max-height: ${({ $height }) => $height}px;
@@ -37,13 +34,10 @@ const StyledIcon = styled.img
   min-height: ${({ $height }) => $height}px;
   min-width: ${({ $width }) => $width}px;
   object-fit: contain;
-  opacity: ${({ $moving }) => ($moving ? 0.5 : 1)};
+  opacity: ${({ $moving }) => ($moving ? "50%" : "100%")};
+  pointer-events: none;
   top: ${({ $offset }) => $offset || undefined};
   visibility: ${({ $loaded }) => ($loaded ? "visible" : "hidden")};
-`;
-
-const StyledPicture = styled.picture`
-  pointer-events: none;
 `;
 
 const SUPPORTED_PIXEL_RATIOS = [3, 2, 1];
@@ -87,7 +81,7 @@ const Icon = forwardRef<
       ref={ref}
       $loaded={loaded}
       onError={({ target }) => {
-        const { currentSrc = "" } = (target || {}) as HTMLImageElement;
+        const { currentSrc = "" } = (target as HTMLImageElement) || {};
 
         if (currentSrc && !failedUrls.includes(currentSrc)) {
           const { pathname } = new URL(currentSrc);
@@ -109,7 +103,7 @@ const Icon = forwardRef<
   );
 
   return (
-    <StyledPicture>
+    <picture>
       {!isStaticIcon &&
         SUPPORTED_PIXEL_RATIOS.map((ratio) => {
           const srcSet = imageSrc(src, imgSize, ratio, ".webp");
@@ -137,7 +131,7 @@ const Icon = forwardRef<
           );
         })}
       {RenderedIcon}
-    </StyledPicture>
+    </picture>
   );
 });
 

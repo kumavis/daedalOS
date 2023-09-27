@@ -5,8 +5,8 @@ import type {
 } from "components/system/Dialogs/Transfer/useTransferDialog";
 import { getModifiedTime } from "components/system/Files/FileEntry/functions";
 import type {
-  CompleteAction,
   Files,
+  NewPath,
 } from "components/system/Files/FileManager/useFolder";
 import { COMPLETE_ACTION } from "components/system/Files/FileManager/useFolder";
 import type { SortBy } from "components/system/Files/FileManager/useSortBy";
@@ -131,11 +131,7 @@ export const iterateFileName = (name: string, iteration: number): string => {
 export const createFileReaders = async (
   files: DataTransferItemList | FileList | never[],
   directory: string,
-  callback: (
-    fileName: string,
-    buffer?: Buffer,
-    completeAction?: CompleteAction
-  ) => void
+  callback: NewPath
 ): Promise<FileReaders> => {
   const fileReaders: FileReaders = [];
   const addFile = (file: File, subFolder = ""): void => {
@@ -210,8 +206,8 @@ export const getEventData = (
     (event as InputChangeEvent).target?.files || dataTransfer?.items || [];
   const text = dataTransfer?.getData("application/json");
 
-  if (files instanceof DataTransferItemList) {
-    files = [...files].filter(
+  if (Array.isArray(files)) {
+    files = [...(files as unknown as DataTransferItemList)].filter(
       (item) => !("kind" in item) || item.kind === "file"
     ) as unknown as DataTransferItemList;
   }
@@ -221,11 +217,7 @@ export const getEventData = (
 
 export const handleFileInputEvent = (
   event: InputChangeEvent | React.DragEvent,
-  callback: (
-    fileName: string,
-    buffer?: Buffer,
-    completeAction?: CompleteAction
-  ) => Promise<void>,
+  callback: NewPath,
   directory: string,
   openTransferDialog: (fileReaders: FileReaders | ObjectReaders) => void,
   hasUpdateId = false
@@ -238,7 +230,7 @@ export const handleFileInputEvent = (
     try {
       const filePaths = JSON.parse(text) as string[];
 
-      if (!Array.isArray(filePaths)) return;
+      if (!Array.isArray(filePaths) || filePaths.length === 0) return;
 
       const isSingleFile = filePaths.length === 1;
       const objectReaders = filePaths.map((filePath) => {
@@ -269,6 +261,10 @@ export const handleFileInputEvent = (
           callback(singleFile.name, undefined, COMPLETE_ACTION.UPDATE_URL);
         }
         if (hasUpdateId || singleFile.directory === singleFile.name) return;
+      }
+
+      if (filePaths.every((filePath) => dirname(filePath) === directory)) {
+        return;
       }
 
       openTransferDialog(objectReaders);
