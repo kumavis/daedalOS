@@ -91,7 +91,7 @@ const FileManager: FC<FileManagerProps> = ({
   const StyledFileManager = StyledIconFileManager;
 
   const { isSelecting, selectionRect, selectionStyling, selectionEvents } =
-    useSelection(fileManagerRef);
+    useSelection(fileManagerRef, focusedEntries, focusFunctions);
   const draggableEntry = useDraggableEntries(
     focusedEntries,
     focusFunctions,
