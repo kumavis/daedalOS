@@ -81,6 +81,11 @@ const types = {
     process: ["NoodJs"],
     type: "Javascript Eval",
   },
+  Ocaps: {
+    icon: "emulator",
+    process: ["Ocaps"],
+    type: "Ocaps Sandboxed App",
+  },
   PdfDocument: {
     icon: "pdf",
     process: ["PDF"],
@@ -125,9 +130,11 @@ const types = {
 
 const extensions: Record<string, Extension> = {
   ".agar": types.Endo,
+  ".eval": types.NoodJs,
+  ".ocaps": types.Ocaps,
+
   ".asx": types.AudioPlaylist,
   ".bin": types.DiscImage,
-  ".eval": types.NoodJs,
   ".dsk": types.DiscImage,
   ".exe": types.Application,
   ".htm": types.HtmlDocument,

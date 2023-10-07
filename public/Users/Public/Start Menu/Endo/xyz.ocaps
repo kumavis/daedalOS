@@ -1,0 +1,13 @@
+console.log('this is an endo daemon program')
+
+const display = document.createElement('h1')
+display.innerText = 'requesting...'
+document.body.appendChild(display)
+
+
+// make a request
+E(getBootstrap()).request('SELF', 'description', 'request-name').then(() => {
+  display.innerText = 'approved!'
+}, () => {
+  display.innerText = 'rejected :('
+})
