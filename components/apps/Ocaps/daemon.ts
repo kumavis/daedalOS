@@ -1,6 +1,6 @@
 // import "./dist-daemon-web-bundle.js";
 import "../../../../endo/packages/daemon/dist-daemon-web-bundle";
-import { type RpcMessage } from "./util";
+import { HelloPortMessage, type RpcMessage } from "./util";
 
 main();
 
@@ -16,14 +16,15 @@ async function main () {
   console.log('hello from daemon!')
   
   addEventListener("message", (event) => {
-    console.log('message in daemon', event);
     if (typeof event.data !== "object") return;
     /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access */
-    const message = event.data as RpcMessage;
-    if (message.type === "HELLO_PORT") {
+    const { type } = event.data as RpcMessage;
+    if (type === "HELLO_PORT") {
+      const message = event.data as HelloPortMessage;
+      const { appId } = message.params;
       const port = event.ports[0];
-      console.log('daemon HELLO PORT', port);
-      connectGuestPort(port);
+      console.log('daemon HELLO PORT', port, appId);
+      connectGuestPort(port, appId);
     }
   });
 }

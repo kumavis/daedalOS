@@ -1,4 +1,4 @@
-import "../../../../endo/packages/daemon/dist-worker-web-init-bundle";
+import "../../../../endo/packages/daemon/dist-worker-init-bundle";
 
 console.log('hello from worker!')
 

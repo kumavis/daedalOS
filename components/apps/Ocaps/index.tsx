@@ -1,9 +1,10 @@
 import Noodjs, { RuntimeConfig } from "components/apps/NoodJs";
 import type { ComponentProcessProps } from "components/system/Apps/RenderComponent";
+import { useProcesses } from "contexts/process";
 import { MessageEventHandler } from "hooks/usePostMessage";
 import { useCallback, type FC } from "react";
 import WorkerEnvSource from './dist-worker-env-bundle.js.raw';
-import { RpcMessage } from "./util";
+import { HelloPortMessage, RpcMessage } from "./util";
 /* eslint-disable-next-line @typescript-eslint/ban-ts-comment */
 // @ts-ignore
 
@@ -14,22 +15,14 @@ if (typeof window !== 'undefined') {
 }
 
 const Browser: FC<ComponentProcessProps> = (props) => {
+  const { id } = props;
+  const {
+    processes: { [id]: process },
+  } = useProcesses();
+  const url = process?.url || '';
+
   const libs: string[] = [];
-  // const runtime = WorkerEnvSource;
-  const runtime = `
-  ${WorkerEnvSource}
-
-  const channel = new MessageChannel();
-  window.parent.postMessage({ type: 'HELLO_PORT' }, '*', [channel.port2]);
-  const connection = makePortConnection(channel.port1);
-  const { closed: capTpClosed, getBootstrap } = connect(connection)
-  globalThis.capTpClosed = capTpClosed;
-  globalThis.getBootstrap = getBootstrap;
-
-  globalThis.loadApp = (exports) => {
-    exports.make(getBootstrap())
-  }
-  `
+  const runtime = `${WorkerEnvSource}`
 
   const runtimeConfig: RuntimeConfig = {
     libs,
@@ -38,17 +31,22 @@ const Browser: FC<ComponentProcessProps> = (props) => {
 
   const onMessage = useCallback<MessageEventHandler>(
     (event) => {
-      console.log('onMessage', event);
       if (typeof event.data !== "object") return;
       /* eslint-disable-next-line @typescript-eslint/no-unsafe-member-access */
       const message = event.data as RpcMessage;
       if (message.type === "HELLO_PORT") {
         const port = event.ports[0];
-        console.log('app HELLO PORT', port);
-        daemonWebWorker.postMessage({ type: 'HELLO_PORT' }, [port]);
+        const appId = url === '/Users/Public/Start Menu/Endo/cat-wallet.ocaps' ? 'HOST' : url;
+        const helloPortMessage: HelloPortMessage = {
+          type: "HELLO_PORT",
+          params: {
+            appId,            
+          },
+        };
+        daemonWebWorker.postMessage(helloPortMessage, [port]);
       }
     },
-    [daemonWebWorker]
+    [daemonWebWorker, url]
   );
 
   return (

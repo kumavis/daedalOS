@@ -19980,7 +19980,7 @@ const        makeDaemonicPersistencePowers=  (
         await fileWriter.return(undefined);
 
         // Calculate hash.
-        const sha512=  digester.digestHex();
+        const sha512=  await digester.digestHex();
         // Finish with an atomic rename.
         const storagePath=  filePowers.joinPath(storageDirectoryPath, sha512);
         await filePowers.renamePath(temporaryStoragePath, storagePath);
@@ -20211,7 +20211,7 @@ const        makeDaemonicPowers=  ({
 })()
 ,
 // === functors[126] ===
-({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let makeQueue,makeCryptoPowers,makeFilePowers,makeDaemonicPersistencePowers,makePetStoreMaker;$h‍_imports([["@endo/stream", [["makeQueue", [$h‍_a => (makeQueue = $h‍_a)]]]],["./daemon-node-powers.js", [["makeCryptoPowers", [$h‍_a => (makeCryptoPowers = $h‍_a),$h‍_live["makeCryptoPowers"]]],["makeFilePowers", [$h‍_a => (makeFilePowers = $h‍_a),$h‍_live["makeFilePowers"]]],["makeDaemonicPersistencePowers", [$h‍_a => (makeDaemonicPersistencePowers = $h‍_a)]]]],["./pet-store.js", [["makePetStoreMaker", [$h‍_a => (makePetStoreMaker = $h‍_a)]]]]]);   
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let makeQueue,makeCryptoPowers,makeFilePowersNode,makeDaemonicPersistencePowers,makePetStoreMaker;$h‍_imports([["@endo/stream", [["makeQueue", [$h‍_a => (makeQueue = $h‍_a)]]]],["./daemon-node-powers.js", [["makeCryptoPowers", [$h‍_a => (makeCryptoPowers = $h‍_a),$h‍_live["makeCryptoPowers"]]],["makeFilePowers", [$h‍_a => (makeFilePowersNode = $h‍_a)]],["makeDaemonicPersistencePowers", [$h‍_a => (makeDaemonicPersistencePowers = $h‍_a)]]]],["./pet-store.js", [["makePetStoreMaker", [$h‍_a => (makePetStoreMaker = $h‍_a)]]]]]);   
 
 
 
@@ -20227,6 +20227,16 @@ const        makeDaemonicPowers=  ({
 
 
 
+const        makeFilePowers=  ({ fs, path: fspath})=>   {
+  const filePowers=  makeFilePowersNode({ fs, path: fspath});
+  return harden({
+    ...filePowers,
+    makeFileWriter: (path)=>  {
+      // our web shimmed fs is a Writer
+      return fs.createWriteStream(path);
+     }});
+
+ };
 
 /**
  * @param {object} opts
@@ -20236,7 +20246,7 @@ const        makeDaemonicPowers=  ({
  * @param {import('./types.js').CryptoPowers} opts.cryptoPowers
  * @param {() => Worker} opts.makeWebWorker
  * @returns {import('./types.js').DaemonicPowers}
- */
+ */$h‍_once.makeFilePowers(makeFilePowers);
 const        makeDaemonicPowers=  ({
   locator,
   url,
@@ -20481,10 +20491,8 @@ const        makeDaemonicControlPowers=  (locator, filePowers, makeWebWorker)=> 
 
 
 
-globalThis.Far=  Far;
-globalThis.E=  E;
-globalThis.makePortConnection=  makePortConnection;
-globalThis.connect=  (connection)=>  {
+
+const connect=  (connection)=>  {
   const messageWriter=  mapWriter(connection.writer, messageToBytes);
   const messageReader=  mapReader(connection.reader, bytesToMessage);
 
@@ -20498,6 +20506,35 @@ globalThis.connect=  (connection)=>  {
     undefined  // bootstrap
 );
  };
+
+const channel=  new MessageChannel();
+window.parent.postMessage({ type: 'HELLO_PORT'},  '*', [channel.port2]);
+const connection=  makePortConnection(channel.port1);
+const { closed: capTpClosed, getBootstrap}=   connect(connection);
+const loadApp=  (appExports)=>  {
+  appExports.make(getBootstrap());
+ };
+
+globalThis.capTpClosed=  capTpClosed;
+globalThis.getBootstrap=  getBootstrap;
+globalThis.Far=  Far;
+globalThis.E=  E;
+globalThis.makePortConnection=  makePortConnection;
+globalThis.loadApp=  loadApp;
+
+// const bundle = await bundleSource(filePath);
+// const bundleText = JSON.stringify(bundle);
+// const bundleBytes = textEncoder.encode(bundleText);
+// bundleReaderRef = makeReaderRef([bundleBytes]);
+
+// await E(party).store(bundleReaderRef, bundleName);
+
+// E(party).importBundleAndEndow(
+//   workerName,
+//   bundleName,
+//   powersName,
+//   resultName,
+// );
 })()
 ,
 ]; // functors end
@@ -21207,13 +21244,13 @@ globalThis.connect=  (connection)=>  {
       makeDaemonicPowers: cell("makeDaemonicPowers"),
     },
     {
+      makeFilePowers: cell("makeFilePowers"),
       makeDaemonicPowers: cell("makeDaemonicPowers"),
       makeWebWorkerWriter: cell("makeWebWorkerWriter"),
       makeWebWorkerReader: cell("makeWebWorkerReader"),
       makePortConnection: cell("makePortConnection"),
       makeDaemonicControlPowers: cell("makeDaemonicControlPowers"),
       makeCryptoPowers: cell("makeCryptoPowers"),
-      makeFilePowers: cell("makeFilePowers"),
     },
     {
     },
@@ -23161,9 +23198,9 @@ function observeImports(map, importName, importIndex) {
     },
     liveVar: {
         makeCryptoPowers: cells[126].makeCryptoPowers.set,
-      makeFilePowers: cells[126].makeFilePowers.set,
   },
     onceVar: {
+      makeFilePowers: cells[126].makeFilePowers.set,
       makeDaemonicPowers: cells[126].makeDaemonicPowers.set,
       makeWebWorkerWriter: cells[126].makeWebWorkerWriter.set,
       makeWebWorkerReader: cells[126].makeWebWorkerReader.set,
