@@ -110,7 +110,7 @@ const directory: Processes = {
       width: 640,
     },
     icon: "/System/Icons/chromium.webp",
-    title: "Ocaps Sandboxed App",
+    title: "Endo Ocaps Sandboxed App",
   },
   FileExplorer: {
     Component: dynamic(() => import("components/apps/FileExplorer")),
