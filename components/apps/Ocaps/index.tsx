@@ -3,7 +3,7 @@ import type { ComponentProcessProps } from "components/system/Apps/RenderCompone
 import { useProcesses } from "contexts/process";
 import { MessageEventHandler } from "hooks/usePostMessage";
 import { useCallback, type FC } from "react";
-import WorkerEnvSource from './dist-worker-env-bundle.js.raw';
+import WorkerEnvSource from './dist/dist-worker-env-bundle.js.raw';
 import { HelloPortMessage, RpcMessage } from "./util";
 /* eslint-disable-next-line @typescript-eslint/ban-ts-comment */
 // @ts-ignore

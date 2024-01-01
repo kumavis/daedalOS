@@ -1,5 +1,7 @@
-// import "./dist-daemon-web-bundle.js";
-import "../../../../endo/packages/daemon/dist-daemon-web-bundle";
+// build from https://github.com/endojs/endo/pull/1806
+import "./dist/dist-daemon-web-bundle.js";
+// import "../../../../endo/packages/daemon/dist-daemon-web-bundle";
+
 import { HelloPortMessage, type RpcMessage } from "./util";
 
 main();
