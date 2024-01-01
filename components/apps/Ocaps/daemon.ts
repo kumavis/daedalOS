@@ -7,6 +7,7 @@ import { HelloPortMessage, type RpcMessage } from "./util";
 main();
 
 async function main () {
+  // @ts-ignore
   const { connectGuestPort } = await globalThis.startDaemon({
     makeWebWorker () {
       console.log('making endo worker in subworker')
@@ -14,7 +15,7 @@ async function main () {
       return worker;
     }
   })
-  
+
   console.log('hello from daemon!')
   
   addEventListener("message", (event) => {
