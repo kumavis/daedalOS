@@ -11,5 +11,5 @@ export type HelloPortMessage = RpcMessage & {
   type: "HELLO_PORT";
   params: {
     appId: string;
-  }
+  };
 };

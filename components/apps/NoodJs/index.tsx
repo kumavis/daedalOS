@@ -35,9 +35,9 @@ const defaultRuntime = `{
 }`;
 
 export type RuntimeConfig = {
-  libs: string[],
-  runtime: string,
-  transformInputSource?: (source: string) => string,
+  libs: string[];
+  runtime: string;
+  transformInputSource?: (source: string) => string;
 };
 
 export const defaultRuntimeConfig: RuntimeConfig = {
@@ -141,5 +141,5 @@ const Browser: FC<NoodjsProps> = ({
 export default Browser;
 
 function escapeForScriptTag(str: string): string {
-  return str.replace(/<\/script>/gi, '<\\/script>');
+  return str.replace(/<\/script>/gi, "<\\/script>");
 }

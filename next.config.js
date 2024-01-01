@@ -47,7 +47,7 @@ const nextConfig = {
     );
     config.module.rules.push({
       test: /\.js\.raw$/,
-      type: 'asset/source'
+      type: "asset/source",
     });
 
     config.resolve.fallback = config.resolve.fallback || {};
@@ -63,6 +63,6 @@ const nextConfig = {
 
 module.exports = bundleAnalyzer
   ? require("@next/bundle-analyzer")({
-    enabled: isProduction,
-  })(nextConfig)
+      enabled: isProduction,
+    })(nextConfig)
   : nextConfig;

@@ -3,15 +3,15 @@ import type { ComponentProcessProps } from "components/system/Apps/RenderCompone
 import { useProcesses } from "contexts/process";
 import { MessageEventHandler } from "hooks/usePostMessage";
 import { useCallback, type FC } from "react";
-import WorkerEnvSource from './dist/dist-worker-env-bundle.js.raw';
+import WorkerEnvSource from "./dist/dist-worker-env-bundle.js.raw";
 import { HelloPortMessage, RpcMessage } from "./util";
 /* eslint-disable-next-line @typescript-eslint/ban-ts-comment */
 // @ts-ignore
 
 // no SSR
 let daemonWebWorker: Worker;
-if (typeof window !== 'undefined') {
-  daemonWebWorker = new Worker(new URL('./daemon.ts', import.meta.url));
+if (typeof window !== "undefined") {
+  daemonWebWorker = new Worker(new URL("./daemon.ts", import.meta.url));
 }
 
 const Browser: FC<ComponentProcessProps> = (props) => {
@@ -19,10 +19,10 @@ const Browser: FC<ComponentProcessProps> = (props) => {
   const {
     processes: { [id]: process },
   } = useProcesses();
-  const url = process?.url || '';
+  const url = process?.url || "";
 
   const libs: string[] = [];
-  const runtime = `${WorkerEnvSource}`
+  const runtime = `${WorkerEnvSource}`;
 
   const runtimeConfig: RuntimeConfig = {
     libs,
@@ -36,11 +36,14 @@ const Browser: FC<ComponentProcessProps> = (props) => {
       const message = event.data as RpcMessage;
       if (message.type === "HELLO_PORT") {
         const port = event.ports[0];
-        const appId = url === '/Users/Public/Start Menu/Endo/cat-wallet.ocaps' ? 'HOST' : url;
+        const appId =
+          url === "/Users/Public/Start Menu/Endo/cat-wallet.ocaps"
+            ? "HOST"
+            : url;
         const helloPortMessage: HelloPortMessage = {
           type: "HELLO_PORT",
           params: {
-            appId,            
+            appId,
           },
         };
         daemonWebWorker.postMessage(helloPortMessage, [port]);
