@@ -1,0 +1,3989 @@
+'use strict';
+loadApp((() => {
+  const functors = [
+// === functors[0] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   // @ts-check
+
+// `@endo/env-options` needs to be imported quite early, and so should
+// avoid importing from ses or anything that depends on ses.
+
+// /////////////////////////////////////////////////////////////////////////////
+// Prelude of cheap good - enough imitations of things we'd use or
+// do differently if we could depend on ses
+
+const { freeze}=   Object;
+const { apply}=   Reflect;
+
+// Should be equivalent to the one in ses' commons.js even though it
+// uses the other technique.
+const uncurryThis=
+  (fn)=>
+  (receiver, ...args)=>
+    apply(fn, receiver, args);
+const arrayPush=  uncurryThis(Array.prototype.push);
+
+const q=  JSON.stringify;
+
+const Fail=  (literals, ...args)=>  {
+  let msg=  literals[0];
+  for( let i=  0; i<  args.length; i+=  1) {
+    msg=   `${msg}${args[i]}${literals[i+ 1] }`;
+   }
+  throw Error(msg);
+ };
+
+// end prelude
+// /////////////////////////////////////////////////////////////////////////////
+
+/**
+ * `makeEnvironmentCaptor` provides a mechanism for getting environment
+ * variables, if they are needed, and a way to catalog the names of all
+ * the environment variables that were captured.
+ *
+ * @param {object} aGlobal
+ */
+const        makeEnvironmentCaptor=  (aGlobal)=>{
+  const capturedEnvironmentOptionNames=  [];
+
+  /**
+   * Gets an environment option by name and returns the option value or the
+   * given default.
+   *
+   * @param {string} optionName
+   * @param {string} defaultSetting
+   * @returns {string}
+   */
+  const getEnvironmentOption=  (optionName, defaultSetting)=>  {
+    // eslint-disable-next-line @endo/no-polymorphic-call
+    typeof optionName===  'string'||
+      Fail `Environment option name ${q(optionName)} must be a string.`;
+    // eslint-disable-next-line @endo/no-polymorphic-call
+    typeof defaultSetting===  'string'||
+      Fail `Environment option default setting ${q(
+        defaultSetting)
+        } must be a string.`;
+
+    /** @type {string} */
+    let setting=  defaultSetting;
+    const globalProcess=  aGlobal.process;
+    if( globalProcess&&  typeof globalProcess===  'object') {
+      const globalEnv=  globalProcess.env;
+      if( globalEnv&&  typeof globalEnv===  'object') {
+        if( optionName in globalEnv) {
+          arrayPush(capturedEnvironmentOptionNames, optionName);
+          const optionValue=  globalEnv[optionName];
+          // eslint-disable-next-line @endo/no-polymorphic-call
+          typeof optionValue===  'string'||
+            Fail `Environment option named ${q(
+              optionName)
+              }, if present, must have a corresponding string value, got ${q(
+              optionValue)
+              }`;
+          setting=  optionValue;
+         }
+       }
+     }
+    return setting;
+   };
+  freeze(getEnvironmentOption);
+
+  const getCapturedEnvironmentOptionNames=  ()=>  {
+    return freeze([...capturedEnvironmentOptionNames]);
+   };
+  freeze(getCapturedEnvironmentOptionNames);
+
+  return freeze({ getEnvironmentOption, getCapturedEnvironmentOptionNames});
+ };$h‍_once.makeEnvironmentCaptor(makeEnvironmentCaptor);
+freeze(makeEnvironmentCaptor);
+})()
+,
+// === functors[1] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([["./src/env-options.js", []]]);   
+})()
+,
+// === functors[2] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let makeEnvironmentCaptor;$h‍_imports([["@endo/env-options", [["makeEnvironmentCaptor", [$h‍_a => (makeEnvironmentCaptor = $h‍_a)]]]]]);   
+
+
+const { getEnvironmentOption}=   makeEnvironmentCaptor(globalThis);
+
+// NOTE: We can't import these because they're not in scope before lockdown.
+// import { assert, details as X, Fail } from '@agoric/assert';
+
+// WARNING: Global Mutable State!
+// This state is communicated to `assert` that makes it available to the
+// causal console, which affects the console log output. Normally we
+// regard the ability to see console log output as a meta-level privilege
+// analogous to the ability to debug. Aside from that, this module should
+// not have any observably mutable state.
+
+let hiddenPriorError;
+let hiddenCurrentTurn=  0;
+let hiddenCurrentEvent=  0;
+
+const DEBUG=  getEnvironmentOption('DEBUG', '');
+
+// Turn on if you seem to be losing error logging at the top of the event loop
+const VERBOSE=  DEBUG.split(':').includes('track-turns');
+
+// Track-turns is disabled by default and can be enabled by an environment
+// option.
+const TRACK_TURNS=  getEnvironmentOption('TRACK_TURNS', 'disabled');
+if( TRACK_TURNS!==  'enabled'&&  TRACK_TURNS!==  'disabled') {
+  throw TypeError( `unrecognized TRACK_TURNS ${JSON.stringify(TRACK_TURNS)}`);
+ }
+const ENABLED=  (TRACK_TURNS||  'disabled')===  'enabled';
+
+// We hoist the following functions out of trackTurns() to discourage the
+// closures from holding onto 'args' or 'func' longer than necessary,
+// which we've seen cause HandledPromise arguments to be retained for
+// a surprisingly long time.
+
+const addRejectionNote=  (detailsNote)=>(reason)=>{
+  if( reason instanceof Error) {
+    assert.note(reason, detailsNote);
+   }
+  if( VERBOSE) {
+    console.log('REJECTED at top of event loop', reason);
+   }
+ };
+
+const wrapFunction=
+  (func, sendingError, X)=>
+  (...args)=>  {
+    hiddenPriorError=  sendingError;
+    hiddenCurrentTurn+=  1;
+    hiddenCurrentEvent=  0;
+    try {
+      let result;
+      try {
+        result=  func(...args);
+       }catch( err) {
+        if( err instanceof Error) {
+          assert.note(
+            err,
+            X `Thrown from: ${hiddenPriorError}:${hiddenCurrentTurn}.${hiddenCurrentEvent}`);
+
+         }
+        if( VERBOSE) {
+          console.log('THROWN to top of event loop', err);
+         }
+        throw err;
+       }
+      // Must capture this now, not when the catch triggers.
+      const detailsNote=  X `Rejection from: ${hiddenPriorError}:${hiddenCurrentTurn}.${hiddenCurrentEvent}`;
+      Promise.resolve(result).catch(addRejectionNote(detailsNote));
+      return result;
+     }finally {
+      hiddenPriorError=  undefined;
+     }
+   };
+
+/**
+ * Given a list of `TurnStarterFn`s, returns a list of `TurnStarterFn`s whose
+ * `this`-free call behaviors are not observably different to those that
+ * cannot see console output. The only purpose is to cause additional
+ * information to appear on the console.
+ *
+ * The call to `trackTurns` is itself a sending event, that occurs in some call
+ * stack in some turn number at some event number within that turn. Each call
+ * to any of the returned `TurnStartFn`s is a receiving event that begins a new
+ * turn. This sending event caused each of those receiving events.
+ *
+ * @template {TurnStarterFn[]} T
+ * @param {T} funcs
+ * @returns {T}
+ */
+const        trackTurns=  (funcs)=>{
+  if( !ENABLED||  typeof globalThis===  'undefined'||  !globalThis.assert) {
+    return funcs;
+   }
+  const { details: X}=   assert;
+
+  hiddenCurrentEvent+=  1;
+  const sendingError=  Error(
+     `Event: ${hiddenCurrentTurn}.${hiddenCurrentEvent}`);
+
+  if( hiddenPriorError!==  undefined) {
+    assert.note(sendingError, X `Caused by: ${hiddenPriorError}`);
+   }
+
+  return (/** @type {T} */
+    funcs.map((func)=>func&&  wrapFunction(func, sendingError, X)));
+
+ };
+
+/**
+ * An optional function that is not this-sensitive, expected to be called at
+ * bottom of stack to start a new turn.
+ *
+ * @typedef {((...args: any[]) => any) | undefined} TurnStarterFn
+ */$h‍_once.trackTurns(trackTurns);
+})()
+,
+// === functors[3] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let trackTurns;$h‍_imports([["./track-turns.js", [["trackTurns", [$h‍_a => (trackTurns = $h‍_a)]]]]]);   
+
+const { details: X, quote: q, Fail}=   assert;
+const { assign, create}=   Object;
+
+/** @type {ProxyHandler<any>} */
+const baseFreezableProxyHandler=  {
+  set(_target, _prop, _value) {
+    return false;
+   },
+  isExtensible(_target) {
+    return false;
+   },
+  setPrototypeOf(_target, _value) {
+    return false;
+   },
+  deleteProperty(_target, _prop) {
+    return false;
+   }};
+
+
+// E Proxy handlers pretend that any property exists on the target and returns
+// a function for their value. While this function is "bound" by context, it is
+// meant to be called as a method. For that reason, the returned function
+// includes a check that the `this` argument corresponds to the initial
+// receiver when the function was retrieved.
+// E Proxy handlers also forward direct calls to the target in case the remote
+// is a function instead of an object. No such receiver checks are necessary in
+// that case.
+
+/**
+ * A Proxy handler for E(x).
+ *
+ * @param {*} x Any value passed to E(x)
+ * @param {import('./types').HandledPromiseConstructor} HandledPromise
+ * @returns {ProxyHandler} the Proxy handler
+ */
+const makeEProxyHandler=  (x, HandledPromise)=>
+  harden({
+    ...baseFreezableProxyHandler,
+    get: (_target, p, receiver)=>  {
+      return harden(
+        {
+          // This function purposely checks the `this` value (see above)
+          // In order to be `this` sensitive it is defined using concise method
+          // syntax rather than as an arrow function. To ensure the function
+          // is not constructable, it also avoids the `function` syntax.
+          [p](...args) {
+            if( this!==  receiver) {
+              // Reject the async function call
+              return HandledPromise.reject(
+                assert.error(
+                  X `Unexpected receiver for "${p}" method of E(${q(x)})`));
+
+
+             }
+
+            return HandledPromise.applyMethod(x, p, args);
+           }
+          // @ts-expect-error https://github.com/microsoft/TypeScript/issues/50319
+}[        p]);
+
+     },
+    apply: (_target, _thisArg, argArray=  [])=>  {
+      return HandledPromise.applyFunction(x, argArray);
+     },
+    has: (_target, _p)=>  {
+      // We just pretend everything exists.
+      return true;
+     }});
+
+
+/**
+ * A Proxy handler for E.sendOnly(x)
+ * It is a variant on the E(x) Proxy handler.
+ *
+ * @param {*} x Any value passed to E.sendOnly(x)
+ * @param {import('./types').HandledPromiseConstructor} HandledPromise
+ * @returns {ProxyHandler} the Proxy handler
+ */
+const makeESendOnlyProxyHandler=  (x, HandledPromise)=>
+  harden({
+    ...baseFreezableProxyHandler,
+    get: (_target, p, receiver)=>  {
+      return harden(
+        {
+          // This function purposely checks the `this` value (see above)
+          // In order to be `this` sensitive it is defined using concise method
+          // syntax rather than as an arrow function. To ensure the function
+          // is not constructable, it also avoids the `function` syntax.
+          [p](...args) {
+            // Throw since the function returns nothing
+            this===  receiver||
+              Fail `Unexpected receiver for "${q(p)}" method of E.sendOnly(${q(
+                x)
+                })`;
+            HandledPromise.applyMethodSendOnly(x, p, args);
+            return undefined;
+           }
+          // @ts-expect-error https://github.com/microsoft/TypeScript/issues/50319
+}[        p]);
+
+     },
+    apply: (_target, _thisArg, argsArray=  [])=>  {
+      HandledPromise.applyFunctionSendOnly(x, argsArray);
+      return undefined;
+     },
+    has: (_target, _p)=>  {
+      // We just pretend that everything exists.
+      return true;
+     }});
+
+
+/**
+ * A Proxy handler for E.get(x)
+ * It is a variant on the E(x) Proxy handler.
+ *
+ * @param {*} x Any value passed to E.get(x)
+ * @param {import('./types').HandledPromiseConstructor} HandledPromise
+ * @returns {ProxyHandler} the Proxy handler
+ */
+const makeEGetProxyHandler=  (x, HandledPromise)=>
+  harden({
+    ...baseFreezableProxyHandler,
+    has: (_target, _prop)=>  true,
+    get: (_target, prop)=>  HandledPromise.get(x, prop)});
+
+
+/**
+ * @param {import('./types').HandledPromiseConstructor} HandledPromise
+ */
+const makeE=  (HandledPromise)=>{
+  return harden(
+    assign(
+      /**
+       * E(x) returns a proxy on which you can call arbitrary methods. Each of these
+       * method calls returns a promise. The method will be invoked on whatever
+       * 'x' designates (or resolves to) in a future turn, not this one.
+       *
+       * @template T
+       * @param {T} x target for method/function call
+       * @returns {ECallableOrMethods<RemoteFunctions<T>>} method/function call proxy
+       */
+      (x)=>harden(new Proxy(()=>  { },makeEProxyHandler(x, HandledPromise))),
+      {
+        /**
+         * E.get(x) returns a proxy on which you can get arbitrary properties.
+         * Each of these properties returns a promise for the property.  The promise
+         * value will be the property fetched from whatever 'x' designates (or
+         * resolves to) in a future turn, not this one.
+         *
+         * @template T
+         * @param {T} x target for property get
+         * @returns {EGetters<LocalRecord<T>>} property get proxy
+         * @readonly
+         */
+        get: (x)=>
+          harden(
+            new Proxy(create(null), makeEGetProxyHandler(x, HandledPromise))),
+
+
+        /**
+         * E.resolve(x) converts x to a handled promise. It is
+         * shorthand for HandledPromise.resolve(x)
+         *
+         * @template T
+         * @param {T} x value to convert to a handled promise
+         * @returns {Promise<Awaited<T>>} handled promise for x
+         * @readonly
+         */
+        resolve: HandledPromise.resolve,
+
+        /**
+         * E.sendOnly returns a proxy similar to E, but for which the results
+         * are ignored (undefined is returned).
+         *
+         * @template T
+         * @param {T} x target for method/function call
+         * @returns {ESendOnlyCallableOrMethods<RemoteFunctions<T>>} method/function call proxy
+         * @readonly
+         */
+        sendOnly: (x)=>
+          harden(
+            new Proxy(()=>  { },makeESendOnlyProxyHandler(x, HandledPromise))),
+
+
+        /**
+         * E.when(x, res, rej) is equivalent to
+         * HandledPromise.resolve(x).then(res, rej)
+         *
+         * @template T
+         * @template [U = T]
+         * @param {T|PromiseLike<T>} x value to convert to a handled promise
+         * @param {(value: T) => ERef<U>} [onfulfilled]
+         * @param {(reason: any) => ERef<U>} [onrejected]
+         * @returns {Promise<U>}
+         * @readonly
+         */
+        when: (x, onfulfilled, onrejected)=>
+          HandledPromise.resolve(x).then(
+            ...trackTurns([onfulfilled, onrejected]))}));
+
+
+
+
+ };
+
+const{default:$c‍_default}={default:makeE};
+
+/** @typedef {ReturnType<makeE>} EProxy */
+
+/**
+ * Creates a type that accepts both near and marshalled references that were
+ * returned from `Remotable` or `Far`, and also promises for such references.
+ *
+ * @template Primary The type of the primary reference.
+ * @template [Local=DataOnly<Primary>] The local properties of the object.
+ * @typedef {ERef<Local & import('./types').RemotableBrand<Local, Primary>>} FarRef
+ */
+
+/**
+ * `DataOnly<T>` means to return a record type `T2` consisting only of
+ * properties that are *not* functions.
+ *
+ * @template T The type to be filtered.
+ * @typedef {Omit<T, FilteredKeys<T, import('./types').Callable>>} DataOnly
+ */
+
+/**
+ * @see {@link https://github.com/microsoft/TypeScript/issues/31394}
+ * @template T
+ * @typedef {PromiseLike<T> | T} ERef
+ */
+
+/**
+ * @template {import('./types').Callable} T
+ * @typedef {(
+ *   ReturnType<T> extends PromiseLike<infer U>                       // if function returns a promise
+ *     ? T                                                            // return the function
+ *     : (...args: Parameters<T>) => Promise<Awaited<ReturnType<T>>>  // make it return a promise
+ * )} ECallable
+ */
+
+/**
+ * @template T
+ * @typedef {{
+ *   readonly [P in keyof T]: T[P] extends import('./types').Callable
+ *     ? ECallable<T[P]>
+ *     : never;
+ * }} EMethods
+ */
+
+/**
+ * @template T
+ * @typedef {{
+ *   readonly [P in keyof T]: T[P] extends PromiseLike<infer U>
+ *     ? T[P]
+ *     : Promise<Awaited<T[P]>>;
+ * }} EGetters
+ */
+
+/**
+ * @template {import('./types').Callable} T
+ * @typedef {(...args: Parameters<T>) => Promise<void>} ESendOnlyCallable
+ */
+
+/**
+ * @template T
+ * @typedef {{
+ *   readonly [P in keyof T]: T[P] extends import('./types').Callable
+ *     ? ESendOnlyCallable<T[P]>
+ *     : never;
+ * }} ESendOnlyMethods
+ */
+
+/**
+ * @template T
+ * @typedef {(
+ *   T extends import('./types').Callable
+ *     ? ESendOnlyCallable<T> & ESendOnlyMethods<Required<T>>
+ *     : ESendOnlyMethods<Required<T>>
+ * )} ESendOnlyCallableOrMethods
+ */
+
+/**
+ * @template T
+ * @typedef {(
+ *   T extends import('./types').Callable
+ *     ? ECallable<T> & EMethods<Required<T>>
+ *     : EMethods<Required<T>>
+ * )} ECallableOrMethods
+ */
+
+/**
+ * Return a union of property names/symbols/numbers P for which the record element T[P]'s type extends U.
+ *
+ * Given const x = { a: 123, b: 'hello', c: 42, 49: () => {}, 53: 67 },
+ *
+ * FilteredKeys<typeof x, number> is the type 'a' | 'c' | 53.
+ * FilteredKeys<typeof x, string> is the type 'b'.
+ * FilteredKeys<typeof x, 42 | 67> is the type 'c' | 53.
+ * FilteredKeys<typeof x, boolean> is the type never.
+ *
+ * @template T
+ * @template U
+ * @typedef {{ [P in keyof T]: T[P] extends U ? P : never; }[keyof T]} FilteredKeys
+ */
+
+/**
+ * `PickCallable<T>` means to return a single root callable or a record type
+ * consisting only of properties that are functions.
+ *
+ * @template T
+ * @typedef {(
+ *   T extends import('./types').Callable
+ *     ? (...args: Parameters<T>) => ReturnType<T>                     // a root callable, no methods
+ *     : Pick<T, FilteredKeys<T, import('./types').Callable>>          // any callable methods
+ * )} PickCallable
+ */
+
+/**
+ * `RemoteFunctions<T>` means to return the functions and properties that are remotely callable.
+ *
+ * @template T
+ * @typedef {(
+ *   T extends import('./types').RemotableBrand<infer L, infer R>     // if a given T is some remote interface R
+ *     ? PickCallable<R>                                              // then return the callable properties of R
+ *     : Awaited<T> extends import('./types').RemotableBrand<infer L, infer R> // otherwise, if the final resolution of T is some remote interface R
+ *     ? PickCallable<R>                                              // then return the callable properties of R
+ *     : T extends PromiseLike<infer U>                               // otherwise, if T is a promise
+ *     ? Awaited<T>                                                   // then return resolved value T
+ *     : T                                                            // otherwise, return T
+ * )} RemoteFunctions
+ */
+
+/**
+ * @template T
+ * @typedef {(
+ *   T extends import('./types').RemotableBrand<infer L, infer R>
+ *     ? L
+ *     : Awaited<T> extends import('./types').RemotableBrand<infer L, infer R>
+ *     ? L
+ *     : T extends PromiseLike<infer U>
+ *     ? Awaited<T>
+ *     : T
+ * )} LocalRecord
+ */
+
+/**
+ * @template [R = unknown]
+ * @typedef {{
+ *   promise: Promise<R>;
+ *   settler: import('./types').Settler<R>;
+ * }} EPromiseKit
+ */
+
+/**
+ * Type for an object that must only be invoked with E.  It supports a given
+ * interface but declares all the functions as asyncable.
+ *
+ * @template T
+ * @typedef {(
+ *   T extends import('./types').Callable
+ *     ? (...args: Parameters<T>) => ERef<Awaited<EOnly<ReturnType<T>>>>
+ *     : T extends Record<PropertyKey, import('./types').Callable>
+ *     ? {
+ *         [K in keyof T]: T[K] extends import('./types').Callable
+ *           ? (...args: Parameters<T[K]>) => ERef<Awaited<EOnly<ReturnType<T[K]>>>>
+ *           : T[K];
+ *       }
+ *     : T
+ * )} EOnly
+ */$h‍_once.default($c‍_default);
+})()
+,
+// === functors[4] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   
+})()
+,
+// === functors[5] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let makeE;$h‍_imports([["./E.js", [["default", [$h‍_a => (makeE = $h‍_a)]]]],["./exports.js", []]]);   
+
+const hp=  HandledPromise;$h‍_once.hp(hp);
+const        E=  makeE(hp);$h‍_once.E(E);
+})()
+,
+// === functors[6] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   /// <reference types="ses"/>
+
+/** @typedef {import('./types.js').Checker} Checker */
+/** @typedef {import('./types.js').PassStyle} PassStyle */
+
+const { details: X, quote: q}=   assert;
+const { isArray}=   Array;
+const { prototype: functionPrototype}=   Function;
+const {
+  getOwnPropertyDescriptor,
+  getPrototypeOf,
+  hasOwnProperty: objectHasOwnProperty,
+  isFrozen,
+  prototype: objectPrototype}=
+    Object;
+const { apply}=   Reflect;
+const { toStringTag: toStringTagSymbol}=   Symbol;
+
+const typedArrayPrototype=  getPrototypeOf(Uint8Array.prototype);
+const typedArrayToStringTagDesc=  getOwnPropertyDescriptor(
+  typedArrayPrototype,
+  toStringTagSymbol);
+
+assert(typedArrayToStringTagDesc);
+const getTypedArrayToStringTag=  typedArrayToStringTagDesc.get;
+assert(typeof getTypedArrayToStringTag===  'function');
+
+const        hasOwnPropertyOf=  (obj, prop)=>
+  apply(objectHasOwnProperty, obj, [prop]);$h‍_once.hasOwnPropertyOf(hasOwnPropertyOf);
+harden(hasOwnPropertyOf);
+
+const        isObject=  (val)=>Object(val)===  val;$h‍_once.isObject(isObject);
+harden(isObject);
+
+/**
+ * Duplicates packages/ses/src/make-hardener.js to avoid a dependency.
+ *
+ * @param {unknown} object
+ */
+const        isTypedArray=  (object)=>{
+  // The object must pass a brand check or toStringTag will return undefined.
+  const tag=  apply(getTypedArrayToStringTag, object, []);
+  return tag!==  undefined;
+ };$h‍_once.isTypedArray(isTypedArray);
+harden(isTypedArray);
+
+const        PASS_STYLE=  Symbol.for('passStyle');
+
+/**
+ * For a function to be a valid method, it must not be passable.
+ * Otherwise, we risk confusing pass-by-copy data carrying
+ * far functions with attempts at far objects with methods.
+ *
+ * TODO HAZARD Because we check this on the way to hardening a remotable,
+ * we cannot yet check that `func` is hardened. However, without
+ * doing so, it's inheritance might change after the `PASS_STYLE`
+ * check below.
+ *
+ * @param {any} func
+ * @returns {boolean}
+ */$h‍_once.PASS_STYLE(PASS_STYLE);
+const        canBeMethod=  (func)=>
+  typeof func===  'function'&&  !(PASS_STYLE in func);$h‍_once.canBeMethod(canBeMethod);
+harden(canBeMethod);
+
+/**
+ * Below we have a series of predicate functions and their (curried) assertion
+ * functions. The semantics of the assertion function is just to assert that
+ * the corresponding predicate function would have returned true. But it
+ * reproduces the internal tests so failures can give a better error message.
+ *
+ * @type {Checker}
+ */
+const        assertChecker=  (cond, details)=>  {
+  assert(cond, details);
+  return true;
+ };$h‍_once.assertChecker(assertChecker);
+harden(assertChecker);
+
+/**
+ * Checks for the presence and enumerability of an own data property.
+ *
+ * @param {object} candidate
+ * @param {string|number|symbol} propertyName
+ * @param {boolean} shouldBeEnumerable
+ * @param {Checker} [check]
+ * @returns {boolean}
+ */
+const        checkNormalProperty=  (
+  candidate,
+  propertyName,
+  shouldBeEnumerable,
+  check)=>
+     {
+  const reject=  !!check&&(  (details)=>check(false, details));
+  const desc=  getOwnPropertyDescriptor(candidate, propertyName);
+  if( desc===  undefined) {
+    return(
+      reject&&  reject(X `${q(propertyName)} property expected: ${candidate}`));
+
+   }
+  return(
+    (hasOwnPropertyOf(desc, 'value')||
+       reject&&
+        reject(
+          X `${q(propertyName)} must not be an accessor property: ${candidate}`))&&(
+
+     shouldBeEnumerable?
+        desc.enumerable||
+         reject&&
+          reject(
+            X `${q(propertyName)} must be an enumerable property: ${candidate}`):
+
+        !desc.enumerable||
+         reject&&
+          reject(
+            X `${q(
+              propertyName)
+              } must not be an enumerable property: ${candidate}`)));
+
+
+ };$h‍_once.checkNormalProperty(checkNormalProperty);
+harden(checkNormalProperty);
+
+const        getTag=  (tagRecord)=>tagRecord[Symbol.toStringTag];$h‍_once.getTag(getTag);
+harden(getTag);
+
+const        checkPassStyle=  (obj, expectedPassStyle, check)=>  {
+  const reject=  !!check&&(  (details)=>check(false, details));
+  const actual=  obj[PASS_STYLE];
+  return(
+    actual===  expectedPassStyle||
+     reject&&
+      reject(X `Expected ${q(expectedPassStyle)}, not ${q(actual)}: ${obj}`));
+
+ };$h‍_once.checkPassStyle(checkPassStyle);
+harden(checkPassStyle);
+
+const makeCheckTagRecord=  (checkProto)=>{
+  /**
+   * @param {{ [PASS_STYLE]: string }} tagRecord
+   * @param {PassStyle} passStyle
+   * @param {Checker} [check]
+   * @returns {boolean}
+   */
+  const checkTagRecord=  (tagRecord, passStyle, check)=>  {
+    const reject=  !!check&&(  (details)=>check(false, details));
+    return(
+      (isObject(tagRecord)||
+         reject&&
+          reject(X `A non-object cannot be a tagRecord: ${tagRecord}`))&&(
+       isFrozen(tagRecord)||
+         reject&&  reject(X `A tagRecord must be frozen: ${tagRecord}`))&&(
+       !isArray(tagRecord)||
+         reject&&  reject(X `An array cannot be a tagRecord: ${tagRecord}`))&&
+      checkNormalProperty(tagRecord, PASS_STYLE, false, check)&&
+      checkPassStyle(tagRecord, passStyle, check)&&
+      checkNormalProperty(tagRecord, Symbol.toStringTag, false, check)&&(
+       typeof getTag(tagRecord)===  'string'||
+         reject&&
+          reject(
+            X `A [Symbol.toStringTag]-named property must be a string: ${tagRecord}`))&&
+
+      checkProto(tagRecord, getPrototypeOf(tagRecord), check));
+
+   };
+  return harden(checkTagRecord);
+ };
+
+const        checkTagRecord=  makeCheckTagRecord(
+  (val, proto, check)=>
+    proto===  objectPrototype||
+     !!check&&
+      check(false, X `A tagRecord must inherit from Object.prototype: ${val}`));$h‍_once.checkTagRecord(checkTagRecord);
+
+harden(checkTagRecord);
+
+const        checkFunctionTagRecord=  makeCheckTagRecord(
+  (val, proto, check)=>
+    proto===  functionPrototype||
+     proto!==  null&&  getPrototypeOf(proto)===  functionPrototype||
+     !!check&&
+      check(
+        false,
+        X `For functions, a tagRecord must inherit from Function.prototype: ${val}`));$h‍_once.checkFunctionTagRecord(checkFunctionTagRecord);
+
+
+harden(checkFunctionTagRecord);
+})()
+,
+// === functors[7] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let assertChecker,canBeMethod,hasOwnPropertyOf,PASS_STYLE,checkTagRecord,checkFunctionTagRecord,isObject,getTag;$h‍_imports([["./passStyle-helpers.js", [["assertChecker", [$h‍_a => (assertChecker = $h‍_a)]],["canBeMethod", [$h‍_a => (canBeMethod = $h‍_a)]],["hasOwnPropertyOf", [$h‍_a => (hasOwnPropertyOf = $h‍_a)]],["PASS_STYLE", [$h‍_a => (PASS_STYLE = $h‍_a)]],["checkTagRecord", [$h‍_a => (checkTagRecord = $h‍_a)]],["checkFunctionTagRecord", [$h‍_a => (checkFunctionTagRecord = $h‍_a)]],["isObject", [$h‍_a => (isObject = $h‍_a)]],["getTag", [$h‍_a => (getTag = $h‍_a)]]]]]);   
+
+
+
+
+
+
+
+
+
+
+
+
+/** @typedef {import('./types.js').Checker} Checker */
+/** @typedef {import('./types.js').InterfaceSpec} InterfaceSpec */
+/** @typedef {import('./types.js').MarshalGetInterfaceOf} MarshalGetInterfaceOf */
+/** @typedef {import('./internal-types.js').PassStyleHelper} PassStyleHelper */
+/** @typedef {import('./types.js').RemotableObject} Remotable */
+
+const { details: X, Fail, quote: q}=   assert;
+const { ownKeys}=   Reflect;
+const { isArray}=   Array;
+const {
+  getPrototypeOf,
+  isFrozen,
+  prototype: objectPrototype,
+  getOwnPropertyDescriptors}=
+    Object;
+
+/**
+ * @param {InterfaceSpec} iface
+ * @param {Checker} [check]
+ */
+const checkIface=  (iface, check)=>  {
+  const reject=  !!check&&(  (details)=>check(false, details));
+  return(
+    // TODO other possible ifaces, once we have third party veracity
+    (typeof iface===  'string'||
+       reject&&
+        reject(
+          X `For now, interface ${iface} must be a string; unimplemented`))&&(
+
+     iface===  'Remotable'||
+      iface.startsWith('Alleged: ')||
+      iface.startsWith('DebugName: ')||
+       reject&&
+        reject(
+          X `For now, iface ${q(
+            iface)
+            } must be "Remotable" or begin with "Alleged: " or "DebugName: "; unimplemented`)));
+
+
+ };
+
+/**
+ * An `iface` must be pure. Right now it must be a string, which is pure.
+ * Later we expect to include some other values that qualify as `PureData`,
+ * which is a pass-by-copy superstructure ending only in primitives or
+ * empty pass-by-copy composites. No remotables, promises, or errors.
+ * We *assume* for now that the pass-by-copy superstructure contains no
+ * proxies.
+ *
+ * @param {InterfaceSpec} iface
+ */
+const        assertIface=  (iface)=>checkIface(iface, assertChecker);$h‍_once.assertIface(assertIface);
+harden(assertIface);
+
+/**
+ * @param {object | Function} original
+ * @param {Checker} [check]
+ * @returns {boolean}
+ */
+const checkRemotableProtoOf=  (original, check)=>  {
+  const reject=  !!check&&(  (details)=>check(false, details));
+  isObject(original)||
+    Fail `Remotables must be objects or functions: ${original}`;
+
+  // A valid remotable object must inherit from a "tag record" -- a
+  // plain-object prototype consisting of only
+  // a `PASS_STYLE` property with value "remotable" and a suitable `Symbol.toStringTag`
+  // property. The remotable could inherit directly from such a tag record, or
+  // it could inherit from another valid remotable, that therefore itself
+  // inherits directly or indirectly from such a tag record.
+  //
+  // TODO: It would be nice to typedef this shape, but we can't declare a type
+  // with PASS_STYLE from JSDoc.
+  //
+  // @type {{ [PASS_STYLE]: string,
+  //          [Symbol.toStringTag]: string,
+  //        }}
+  //
+  const proto=  getPrototypeOf(original);
+  if( proto===  objectPrototype||  proto===  null) {
+    return(
+      reject&&
+      reject(X `Remotables must be explicitly declared: ${q(original)}`));
+
+   }
+
+  if( typeof original===  'object') {
+    const protoProto=  getPrototypeOf(proto);
+    if( protoProto!==  objectPrototype&&  protoProto!==  null) {
+      // eslint-disable-next-line no-use-before-define
+      return checkRemotable(proto, check);
+     }
+    if( !checkTagRecord(proto, 'remotable', check)) {
+      return false;
+     }
+   }else if( typeof original===  'function') {
+    if( !checkFunctionTagRecord(proto, 'remotable', check)) {
+      return false;
+     }
+   }
+
+  // Typecasts needed due to https://github.com/microsoft/TypeScript/issues/1863
+  const passStyleKey=  /** @type {unknown} */  PASS_STYLE;
+  const tagKey=  /** @type {unknown} */  Symbol.toStringTag;
+  const {
+    // checkTagRecord already verified PASS_STYLE and Symbol.toStringTag own data properties.
+    [/** @type {string} */  passStyleKey]:  _passStyleDesc,
+    [/** @type {string} */  tagKey]:  { value: iface},
+    ...restDescs}=
+      getOwnPropertyDescriptors(proto);
+
+  return(
+    (ownKeys(restDescs).length===  0||
+       reject&&
+        reject(
+          X `Unexpected properties on Remotable Proto ${ownKeys(restDescs)}`))&&
+
+    checkIface(iface, check));
+
+ };
+
+/**
+ * Keep a weak set of confirmed remotables for marshal performance
+ * (without which we would incur a redundant verification in
+ * getInterfaceOf).
+ * We don't remember rejections because they are possible to correct
+ * with e.g. `harden`.
+ *
+ * @type {WeakSet<Remotable>}
+ */
+const confirmedRemotables=  new WeakSet();
+
+/**
+ * @param {Remotable} val
+ * @param {Checker} [check]
+ * @returns {boolean}
+ */
+const checkRemotable=  (val, check)=>  {
+  if( confirmedRemotables.has(val)) {
+    return true;
+   }
+  const reject=  !!check&&(  (details)=>check(false, details));
+  if( !isFrozen(val)) {
+    return reject&&  reject(X `cannot serialize non-frozen objects like ${val}`);
+   }
+  // eslint-disable-next-line no-use-before-define
+  if( !RemotableHelper.canBeValid(val, check)) {
+    return false;
+   }
+  const result=  checkRemotableProtoOf(val, check);
+  if( result) {
+    confirmedRemotables.add(val);
+   }
+  return result;
+ };
+
+/** @type {MarshalGetInterfaceOf} */
+const        getInterfaceOf=  (val)=>{
+  if(
+    !isObject(val)||
+    val[PASS_STYLE]!==  'remotable'||
+    !checkRemotable(val))
+    {
+    return undefined;
+   }
+  return getTag(val);
+ };$h‍_once.getInterfaceOf(getInterfaceOf);
+harden(getInterfaceOf);
+
+/**
+ *
+ * @type {PassStyleHelper}
+ */
+const        RemotableHelper=  harden({
+  styleName: 'remotable',
+
+  canBeValid: (candidate, check=  undefined)=>  {
+    const reject=  !!check&&(  (details)=>check(false, details));
+    const validType=
+      (isObject(candidate)||
+         reject&&
+          reject(X `cannot serialize non-objects as Remotable ${candidate}`))&&(
+       !isArray(candidate)||
+         reject&&
+          reject(X `cannot serialize arrays as Remotable ${candidate}`));
+    if( !validType) {
+      return false;
+     }
+
+    const descs=  getOwnPropertyDescriptors(candidate);
+    if( typeof candidate===  'object') {
+      // Every own property (regardless of enumerability)
+      // must have a function value.
+      return ownKeys(descs).every((key)=>{
+        return(
+          // Typecast needed due to https://github.com/microsoft/TypeScript/issues/1863
+          (hasOwnPropertyOf(descs[/** @type {string} */  key],  'value')||
+             reject&&
+              reject(
+                X `cannot serialize Remotables with accessors like ${q(
+                  String(key))
+                  } in ${candidate}`))&&(
+
+            key===  Symbol.toStringTag&&  checkIface(candidate[key], check)||
+             (canBeMethod(candidate[key])||
+               reject&&
+                reject(
+                  X `cannot serialize Remotables with non-methods like ${q(
+                    String(key))
+                    } in ${candidate}`))&&(
+
+               key!==  PASS_STYLE||
+                 reject&&
+                  reject(X `A pass-by-remote cannot shadow ${q(PASS_STYLE)}`))));
+
+       });
+     }else if( typeof candidate===  'function') {
+      // Far functions cannot be methods, and cannot have methods.
+      // They must have exactly expected `.name` and `.length` properties
+      const {
+        name: nameDesc,
+        length: lengthDesc,
+        // @ts-ignore TS doesn't like symbols as computed indexes??
+        [Symbol.toStringTag]: toStringTagDesc,
+        ...restDescs}=
+          descs;
+      const restKeys=  ownKeys(restDescs);
+      return(
+        ( nameDesc&&  typeof nameDesc.value===  'string'||
+           reject&&
+            reject(X `Far function name must be a string, in ${candidate}`))&&(
+          lengthDesc&&  typeof lengthDesc.value===  'number'||
+           reject&&
+            reject(
+              X `Far function length must be a number, in ${candidate}`))&&(
+
+         toStringTagDesc===  undefined||
+           (typeof toStringTagDesc.value===  'string'||
+             reject&&
+              reject(
+                X `Far function @@toStringTag must be a string, in ${candidate}`))&&
+
+            checkIface(toStringTagDesc.value, check))&&(
+         restKeys.length===  0||
+           reject&&
+            reject(
+              X `Far functions unexpected properties besides .name and .length ${restKeys}`)));
+
+
+     }
+    return reject&&  reject(X `unrecognized typeof ${candidate}`);
+   },
+
+  assertValid: (candidate)=>checkRemotable(candidate, assertChecker),
+
+  every: (_passable, _fn)=>  true});$h‍_once.RemotableHelper(RemotableHelper);
+})()
+,
+// === functors[8] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let assertChecker,PASS_STYLE,assertIface,getInterfaceOf,RemotableHelper;$h‍_imports([["./passStyle-helpers.js", [["assertChecker", [$h‍_a => (assertChecker = $h‍_a)]],["PASS_STYLE", [$h‍_a => (PASS_STYLE = $h‍_a)]]]],["./remotable.js", [["assertIface", [$h‍_a => (assertIface = $h‍_a)]],["getInterfaceOf", [$h‍_a => (getInterfaceOf = $h‍_a)]],["RemotableHelper", [$h‍_a => (RemotableHelper = $h‍_a)]]]]]);   
+
+
+
+
+/** @typedef {import('./types.js').InterfaceSpec} InterfaceSpec */
+/** @template L,R @typedef {import('@endo/eventual-send').RemotableBrand<L, R>} RemotableBrand */
+
+const { quote: q, Fail}=   assert;
+
+const { prototype: functionPrototype}=   Function;
+const {
+  getPrototypeOf,
+  setPrototypeOf,
+  create,
+  isFrozen,
+  prototype: objectPrototype}=
+    Object;
+
+/**
+ * Now that the remotableProto does not provide its own `toString` method,
+ * ensure it always inherits from something. The original prototype of
+ * `remotable` if there was one, or `Object.prototype` otherwise.
+ *
+ * @param {object} remotable
+ * @param {InterfaceSpec} iface
+ * @returns {object}
+ */
+const makeRemotableProto=  (remotable, iface)=>  {
+  let oldProto=  getPrototypeOf(remotable);
+  if( typeof remotable===  'object') {
+    if( oldProto===  null) {
+      oldProto=  objectPrototype;
+     }
+    oldProto===  objectPrototype||
+      Fail `For now, remotables cannot inherit from anything unusual, in ${remotable}`;
+   }else if( typeof remotable===  'function') {
+    oldProto!==  null||
+      Fail `Original function must not inherit from null: ${remotable}`;
+    oldProto===  functionPrototype||
+      getPrototypeOf(oldProto)===  functionPrototype||
+      Fail `Far functions must originally inherit from Function.prototype, in ${remotable}`;
+   }else {
+    Fail `unrecognized typeof ${remotable}`;
+   }
+  return harden(
+    create(oldProto, {
+      [PASS_STYLE]: { value: 'remotable'},
+      [Symbol.toStringTag]: { value: iface}}));
+
+
+ };
+
+const assertCanBeRemotable=  (candidate)=>
+  RemotableHelper.canBeValid(candidate, assertChecker);
+
+/**
+ * Create and register a Remotable.  After this, getInterfaceOf(remotable)
+ * returns iface.
+ *
+ * // https://github.com/Agoric/agoric-sdk/issues/804
+ *
+ * @template {{}} T
+ * @param {InterfaceSpec} [iface] The interface specification for
+ * the remotable. For now, a string iface must be "Remotable" or begin with
+ * "Alleged: " or "DebugName: ", to serve as the alleged name. More
+ * general ifaces are not yet implemented. This is temporary. We include the
+ * "Alleged" or "DebugName" as a reminder that we do not yet have SwingSet
+ * or Comms Vat
+ * support for ensuring this is according to the vat hosting the object.
+ * Currently, Alice can tell Bob about Carol, where VatA (on Alice's behalf)
+ * misrepresents Carol's `iface`. VatB and therefore Bob will then see
+ * Carol's `iface` as misrepresented by VatA.
+ * @param {undefined} [props] Currently may only be undefined.
+ * That plan is that own-properties are copied to the remotable
+ * @param {T} [remotable] The object used as the remotable
+ * @returns {T & RemotableBrand<{}, T>} remotable, modified for debuggability
+ */
+const        Remotable=  (
+  iface=  'Remotable',
+  props=  undefined,
+  remotable=  /** @type {T} */  {})=>
+     {
+  assertIface(iface);
+  assert(iface);
+  // TODO: When iface is richer than just string, we need to get the allegedName
+  // in a different way.
+  props===  undefined||  Fail `Remotable props not yet implemented ${props}`;
+
+  // Fail fast: check that the unmodified object is able to become a Remotable.
+  assertCanBeRemotable(remotable);
+
+  // Ensure that the remotable isn't already marked.
+  !(PASS_STYLE in remotable)||
+    Fail `Remotable ${remotable} is already marked as a ${q(
+      remotable[PASS_STYLE])
+      }`;
+  // `isFrozen` always returns true with a fake `harden`, but we want that case
+  // to succeed anyway. Faking `harden` is only correctness preserving
+  // if the code in question contains no bugs that the real `harden` would
+  // have caught.
+  // @ts-ignore `isFake` purposely not in the type
+  harden.isFake||
+    // Ensure that the remotable isn't already frozen.
+    !isFrozen(remotable)||
+    Fail `Remotable ${remotable} is already frozen`;
+  const remotableProto=  makeRemotableProto(remotable, iface);
+
+  // Take a static copy of the enumerable own properties as data properties.
+  // const propDescs = getOwnPropertyDescriptors({ ...props });
+  const mutateHardenAndCheck=  (target)=>{
+    // defineProperties(target, propDescs);
+    setPrototypeOf(target, remotableProto);
+    harden(target);
+    assertCanBeRemotable(target);
+   };
+
+  // Fail fast: check a fresh remotable to see if our rules fit.
+  mutateHardenAndCheck({});
+
+  // Actually finish the new remotable.
+  mutateHardenAndCheck(remotable);
+
+  // COMMITTED!
+  // We're committed, so keep the interface for future reference.
+  assert(iface!==  undefined); // To make TypeScript happy
+  return (/** @type {T & RemotableBrand<{}, T>} */ remotable);
+ };$h‍_once.Remotable(Remotable);
+harden(Remotable);
+
+/**
+ * A concise convenience for the most common `Remotable` use.
+ *
+ * @template {{}} T
+ * @param {string} farName This name will be prepended with `Alleged: `
+ * for now to form the `Remotable` `iface` argument.
+ * @param {T} [remotable] The object used as the remotable
+ */
+const        Far=  (farName, remotable=  undefined)=>  {
+  const r=  remotable===  undefined?  /** @type {T} */  {}:   remotable;
+  return Remotable( `Alleged: ${farName}`,undefined, r);
+ };$h‍_once.Far(Far);
+harden(Far);
+
+/**
+ * Coerce `func` to a far function that preserves its call behavior.
+ * If it is already a far function, return it. Otherwise make and return a
+ * new far function that wraps `func` and forwards calls to it. This
+ * works even if `func` is already frozen. `ToFarFunction` is to be used
+ * when the function comes from elsewhere under less control. For functions
+ * you author in place, better to use `Far` on their function literal directly.
+ *
+ * @param {string} farName to be used only if `func` is not already a
+ * far function.
+ * @param {(...args: any[]) => any} func
+ */
+const        ToFarFunction=  (farName, func)=>  {
+  if( getInterfaceOf(func)!==  undefined) {
+    return func;
+   }
+  return Far(farName, (...args)=>  func(...args));
+ };$h‍_once.ToFarFunction(ToFarFunction);
+harden(ToFarFunction);
+})()
+,
+// === functors[9] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let Far;$h‍_imports([["./make-far.js", [["Far", [$h‍_a => (Far = $h‍_a)]]]]]);   
+
+/**
+ * The result iterator has as many elements as the `baseIterator` and
+ * have the same termination -- the same completion value or failure
+ * reason. But the non-final values are the corresponding non-final
+ * values from `baseIterator` as transformed by `func`.
+ *
+ * @template T,U
+ * @param {Iterable<T>} baseIterable
+ * @param {(value: T) => U} func
+ * @returns {Iterable<U>}
+ */
+const        mapIterable=  (baseIterable, func)=>
+  /** @type {Iterable<U>} */
+  Far('mapped iterable', {
+    [Symbol.iterator]: ()=>  {
+      const baseIterator=  baseIterable[Symbol.iterator]();
+      return Far('mapped iterator', {
+        next: ()=>  {
+          const { value: baseValue, done}=   baseIterator.next();
+          const value=  done?  baseValue:  func(baseValue);
+          return harden({ value, done});
+         }});
+
+     }});$h‍_once.mapIterable(mapIterable);
+
+harden(mapIterable);
+
+/**
+ * The result iterator has a subset of the non-final values from the
+ * `baseIterator` --- those for which `pred(value)` was truthy. The result
+ * has the same termination as the `baseIterator` -- the same completion value
+ * or failure reason.
+ *
+ * @template T
+ * @param {Iterable<T>} baseIterable
+ * @param {(value: T) => boolean} pred
+ * @returns {Iterable<T>}
+ */
+const        filterIterable=  (baseIterable, pred)=>
+  /** @type {Iterable<U>} */
+  Far('filtered iterable', {
+    [Symbol.iterator]: ()=>  {
+      const baseIterator=  baseIterable[Symbol.iterator]();
+      return Far('filtered iterator', {
+        next: ()=>  {
+          for(;;)  {
+            const result=  baseIterator.next();
+            const { value, done}=   result;
+            if( done||  pred(value)) {
+              return result;
+             }
+           }
+         }});
+
+     }});$h‍_once.filterIterable(filterIterable);
+
+harden(filterIterable);
+})()
+,
+// === functors[10] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let assertChecker;$h‍_imports([["./passStyle-helpers.js", [["assertChecker", [$h‍_a => (assertChecker = $h‍_a)]]]]]);   
+
+
+
+/** @typedef {import('./internal-types.js').PassStyleHelper} PassStyleHelper */
+/** @typedef {import('./types.js').Checker} Checker */
+
+const { details: X, Fail}=   assert;
+const { getPrototypeOf, getOwnPropertyDescriptors}=   Object;
+const { ownKeys}=   Reflect;
+
+// TODO: Maintenance hazard: Coordinate with the list of errors in the SES
+// whilelist. Currently, both omit AggregateError, which is now standard. Both
+// must eventually include it.
+const errorConstructors=  new Map([
+  ['Error', Error],
+  ['EvalError', EvalError],
+  ['RangeError', RangeError],
+  ['ReferenceError', ReferenceError],
+  ['SyntaxError', SyntaxError],
+  ['TypeError', TypeError],
+  ['URIError', URIError]]);
+
+
+const        getErrorConstructor=  (name)=>errorConstructors.get(name);$h‍_once.getErrorConstructor(getErrorConstructor);
+harden(getErrorConstructor);
+
+/**
+ * @param {unknown} candidate
+ * @param {Checker} [check]
+ * @returns {boolean}
+ */
+const checkErrorLike=  (candidate, check=  undefined)=>  {
+  const reject=  !!check&&(  (details)=>check(false, details));
+  // TODO: Need a better test than instanceof
+  return(
+    candidate instanceof Error||
+     reject&&  reject(X `Error expected: ${candidate}`));
+
+ };
+harden(checkErrorLike);
+
+/**
+ * Validating error objects are passable raises a tension between security
+ * vs preserving diagnostic information. For errors, we need to remember
+ * the error itself exists to help us diagnose a bug that's likely more
+ * pressing than a validity bug in the error itself. Thus, whenever it is safe
+ * to do so, we prefer to let the error-like test succeed and to couch these
+ * complaints as notes on the error.
+ *
+ * To resolve this, such a malformed error object will still pass
+ * `isErrorLike` so marshal can use this for top level error to report from,
+ * even if it would not actually validate.
+ * Instead, the diagnostics that `assertError` would have reported are
+ * attached as notes to the malformed error. Thus, a malformed
+ * error is passable by itself, but not as part of a passable structure.
+ *
+ * @param {unknown} candidate
+ * @returns {boolean}
+ */
+const        isErrorLike=  (candidate)=>checkErrorLike(candidate);$h‍_once.isErrorLike(isErrorLike);
+harden(isErrorLike);
+
+/**
+ * @type {PassStyleHelper}
+ */
+const        ErrorHelper=  harden({
+  styleName: 'error',
+
+  canBeValid: checkErrorLike,
+
+  assertValid: (candidate)=>{
+    ErrorHelper.canBeValid(candidate, assertChecker);
+    const proto=  getPrototypeOf(candidate);
+    const { name}=   proto;
+    const EC=  getErrorConstructor(name);
+     EC&&  EC.prototype===  proto||
+      Fail `Errors must inherit from an error class .prototype ${candidate}`;
+
+    const {
+      // TODO Must allow `cause`, `errors`
+      message: mDesc,
+      stack: stackDesc,
+      ...restDescs}=
+        getOwnPropertyDescriptors(candidate);
+    ownKeys(restDescs).length<  1||
+      Fail `Passed Error has extra unpassed properties ${restDescs}`;
+    if( mDesc) {
+      typeof mDesc.value===  'string'||
+        Fail `Passed Error "message" ${mDesc} must be a string-valued data property.`;
+      !mDesc.enumerable||
+        Fail `Passed Error "message" ${mDesc} must not be enumerable`;
+     }
+    if( stackDesc) {
+      typeof stackDesc.value===  'string'||
+        Fail `Passed Error "stack" ${stackDesc} must be a string-valued data property.`;
+      !stackDesc.enumerable||
+        Fail `Passed Error "stack" ${stackDesc} must not be enumerable`;
+     }
+    return true;
+   }});
+
+
+/**
+ * Return a new passable error that propagates the diagnostic info of the
+ * original, and is linked to the original as a note.
+ *
+ * @param {Error} err
+ * @returns {Error}
+ */$h‍_once.ErrorHelper(ErrorHelper);
+const        toPassableError=  (err)=>{
+  const { name, message}=   err;
+
+  const EC=  getErrorConstructor( `${name}`)|| Error;
+  const newError=  harden(new EC( `${message}`));
+  // Even the cleaned up error copy, if sent to the console, should
+  // cause hidden diagnostic information of the original error
+  // to be logged.
+  assert.note(newError, X `copied from error ${err}`);
+  return newError;
+ };$h‍_once.toPassableError(toPassableError);
+harden(toPassableError);
+})()
+,
+// === functors[11] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   const { Fail, quote: q}=   assert;
+const { ownKeys}=   Reflect;
+
+/**
+ * The well known symbols are static symbol values on the `Symbol` constructor.
+ */
+const wellKnownSymbolNames=  new Map(
+  ownKeys(Symbol).
+     filter(
+      (name)=>typeof name===  'string'&&  typeof Symbol[name]===  'symbol').
+
+     filter((name)=>{
+      // @ts-expect-error It doesn't know name cannot be a symbol
+      !name.startsWith('@@')||
+        Fail `Did not expect Symbol to have a symbol-valued property name starting with "@@" ${q(
+          name)
+          }`;
+      return true;
+     })
+    // @ts-ignore It doesn't know name cannot be a symbol
+.    map((name)=>[Symbol[name],  `@@${name}`]));
+
+
+/**
+ * The passable symbols are the well known symbols (the symbol values
+ * of static properties of the `Symbol` constructor) and the registered
+ * symbols.
+ *
+ * @param {any} sym
+ * @returns {boolean}
+ */
+const        isPassableSymbol=  (sym)=>
+  typeof sym===  'symbol'&&(
+   typeof Symbol.keyFor(sym)===  'string'||  wellKnownSymbolNames.has(sym));$h‍_once.isPassableSymbol(isPassableSymbol);
+harden(isPassableSymbol);
+
+const        assertPassableSymbol=  (sym)=>
+  isPassableSymbol(sym)||
+  Fail `Only registered symbols or well-known symbols are passable: ${q(sym)}`;$h‍_once.assertPassableSymbol(assertPassableSymbol);
+harden(assertPassableSymbol);
+
+/**
+ * If `sym` is a passable symbol, return a string that uniquely identifies this
+ * symbol. If `sym` is a non-passable symbol, return `undefined`.
+ *
+ * The passable symbols are the well known symbols (the symbol values
+ * of static properties of the `Symbol` constructor) and the registered
+ * symbols. Since the registration string of a registered symbol can be any
+ * string, if we simply used that to identify those symbols, there would not
+ * be any remaining strings left over to identify the well-known symbols.
+ * Instead, we reserve strings beginning with `"@@"` for purposes of this
+ * encoding. We identify a well known symbol such as `Symbol.iterator`
+ * by prefixing the property name with `"@@"`, such as `"@@iterator"`.
+ * For registered symbols whose name happens to begin with `"@@"`, such
+ * as `Symbol.for('@@iterator')` or `Symbol.for('@@foo')`, we identify
+ * them by prefixing them with an extra `"@@"`, such as
+ * `"@@@@iterator"` or `"@@@@foo"`. (This is the Hilbert Hotel encoding
+ * technique.)
+ *
+ * @param {symbol} sym
+ * @returns {string=}
+ */
+const        nameForPassableSymbol=  (sym)=>{
+  const name=  Symbol.keyFor(sym);
+  if( name===  undefined) {
+    return wellKnownSymbolNames.get(sym);
+   }
+  if( name.startsWith('@@')) {
+    return  `@@${name}`;
+   }
+  return name;
+ };$h‍_once.nameForPassableSymbol(nameForPassableSymbol);
+harden(nameForPassableSymbol);
+
+const AtAtPrefixPattern=  /^@@(.*)$/;
+harden(AtAtPrefixPattern);
+
+/**
+ * If `name` is a string that could have been produced by
+ * `nameForPassableSymbol`, return the symbol argument it was produced to
+ * represent.
+ *
+ *    If `name` does not begin with `"@@"`, then just the corresponding
+ *      registered symbol, `Symbol.for(name)`.
+ *    If `name` is `"@@"` followed by a well known symbol's property name on
+ *      `Symbol` such `"@@iterator", return that well known symbol such as
+ *      `Symbol.iterator`
+ *    If `name` begins with `"@@@@"` it encodes the registered symbol whose
+ *      name begins with `"@@"` instead.
+ *    Otherwise, if name begins with `"@@"` it may encode a registered symbol
+ *      from a future version of JavaScript, but it is not one we can decode
+ *      yet, so throw.
+ *
+ * @param {string} name
+ * @returns {symbol=}
+ */
+const        passableSymbolForName=  (name)=>{
+  if( typeof name!==  'string') {
+    return undefined;
+   }
+  const match=  AtAtPrefixPattern.exec(name);
+  if( match) {
+    const suffix=  match[1];
+    if( suffix.startsWith('@@')) {
+      return Symbol.for(suffix);
+     }else {
+      const sym=  Symbol[suffix];
+      if( typeof sym===  'symbol') {
+        return sym;
+       }
+      Fail `Reserved for well known symbol ${q(suffix)}: ${q(name)}`;
+     }
+   }
+  return Symbol.for(name);
+ };$h‍_once.passableSymbolForName(passableSymbolForName);
+harden(passableSymbolForName);
+})()
+,
+// === functors[12] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   /// <reference types="ses"/>
+
+/**
+ * @template T
+ * @callback PromiseExecutor The promise executor
+ * @param {(value: import('./types.js').ERef<T>) => void} resolve
+ * @param {(reason: any) => void} reject
+ */
+
+/**
+ * makeReleasingExecutorKit() builds resolve/reject functions which drop references
+ * to the resolve/reject functions gathered from an executor to be used with a
+ * promise constructor.
+ *
+ * @template T
+ * @returns {Pick<import('./types.js').PromiseKit<T>, 'resolve' | 'reject'> & { executor: PromiseExecutor<T>}}
+ */
+const        makeReleasingExecutorKit=  ()=>  {
+  /** @type {null | undefined | ((value: import('./types.js').ERef<T>) => void)} */
+  let internalResolve;
+  /** @type {null | undefined | ((reason: unknown) => void)} */
+  let internalReject;
+
+  /** @param {import('./types.js').ERef<T>} value */
+  const resolve=  (value)=>{
+    if( internalResolve) {
+      internalResolve(value);
+      internalResolve=  null;
+      internalReject=  null;
+     }else {
+      assert(internalResolve===  null);
+     }
+   };
+
+  /** @param {unknown} reason */
+  const reject=  (reason)=>{
+    if( internalReject) {
+      internalReject(reason);
+      internalResolve=  null;
+      internalReject=  null;
+     }else {
+      assert(internalReject===  null);
+     }
+   };
+
+  const executor=  (res, rej)=>  {
+    assert(internalResolve===  undefined&&  internalReject===  undefined);
+    internalResolve=  res;
+    internalReject=  rej;
+   };
+
+  return harden({ resolve, reject, executor});
+ };$h‍_once.makeReleasingExecutorKit(makeReleasingExecutorKit);
+harden(makeReleasingExecutorKit);
+})()
+,
+// === functors[13] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   /*
+Initial version authored by Brian Kim:
+https://github.com/nodejs/node/issues/17469#issuecomment-685216777
+
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+For more information, please refer to <http://unlicense.org/>
+*/
+
+const isObject=  (value)=>Object(value)===  value;
+
+/**
+ * @template [T=any]
+ * @typedef {object} Deferred
+ * @property {(value?: import("./types.js").ERef<T> ) => void} resolve
+ * @property {(err?: any ) => void} reject
+ */
+
+/**
+ * @typedef { never
+ *  | {settled: false, deferreds: Set<Deferred>}
+ *  | {settled: true, deferreds?: undefined}
+ * } PromiseMemoRecord
+ */
+
+// Keys are the values passed to race, values are a record of data containing a
+// set of deferreds and whether the value has settled.
+/** @type {WeakMap<object, PromiseMemoRecord>} */
+const knownPromises=  new WeakMap();
+
+/**
+ * @param {PromiseMemoRecord | undefined} record
+ * @returns {Set<Deferred>}
+ */
+const markSettled=  (record)=>{
+  if( !record||  record.settled) {
+    return new Set();
+   }
+
+  const { deferreds}=   record;
+  Object.assign(record, {
+    deferreds: undefined,
+    settled: true});
+
+  Object.freeze(record);
+  return deferreds;
+ };
+
+/**
+ *
+ * @param {any} value
+ * @returns {PromiseMemoRecord}
+ */
+const getMemoRecord=  (value)=>{
+  if( !isObject(value)) {
+    // If the contender is a primitive, attempting to use it as a key in the
+    // weakmap would throw an error. Luckily, it is safe to call
+    // `Promise.resolve(contender).then` on a primitive value multiple times
+    // because the promise fulfills immediately. So we fake a settled record.
+    return harden({ settled: true});
+   }
+
+  let record=  knownPromises.get(value);
+
+  if( !record) {
+    record=  { deferreds: new Set(), settled: false};
+    knownPromises.set(value, record);
+    // This call to `then` happens once for the lifetime of the value.
+    Promise.resolve(value).then(
+      (val)=>{
+        for( const { resolve}of   markSettled(record)) {
+          resolve(val);
+         }
+       },
+      (err)=>{
+        for( const { reject}of   markSettled(record)) {
+          reject(err);
+         }
+       });
+
+   }
+  return record;
+ };
+
+const { race}=   {
+  /**
+   * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
+   * or rejected.
+   *
+   * Unlike `Promise.race` it cleans up after itself so a non-resolved value doesn't hold onto
+   * the result promise.
+   *
+   * @template T
+   * @template {PromiseConstructor} [P=PromiseConstructor]
+   * @this {P}
+   * @param {Iterable<T>} values An iterable of Promises.
+   * @returns {Promise<Awaited<T>>} A new Promise.
+   */
+  race(values) {
+    let deferred;
+    /** @type {T[]} */
+    const cachedValues=  [];
+    const C=  this;
+    const result=  new C((resolve, reject)=>  {
+      deferred=  { resolve, reject};
+      for( const value of values) {
+        cachedValues.push(value);
+        const { settled, deferreds}=   getMemoRecord(value);
+        if( settled) {
+          // If the contender is settled (including primitives), it is safe
+          // to call `Promise.resolve(value).then` on it.
+          C.resolve(value).then(resolve, reject);
+         }else {
+          deferreds.add(deferred);
+         }
+       }
+     });
+
+    // The finally callback executes when any value settles, preventing any of
+    // the unresolved values from retaining a reference to the resolved value.
+    return result.finally(()=>  {
+      for( const value of cachedValues) {
+        const { deferreds}=   getMemoRecord(value);
+        if( deferreds) {
+          deferreds.delete(deferred);
+         }
+       }
+     });
+   }};$h‍_once.race(race);
+})()
+,
+// === functors[14] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);Object.defineProperty(isPromise, 'name', {value: "isPromise"});$h‍_once.isPromise(isPromise);   /**
+ * Determine if the argument is a Promise.
+ *
+ * @param {unknown} maybePromise The value to examine
+ * @returns {maybePromise is Promise} Whether it is a promise
+ */
+function        isPromise(maybePromise) {
+  return Promise.resolve(maybePromise)===  maybePromise;
+ }
+harden(isPromise);
+})()
+,
+// === functors[15] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   
+})()
+,
+// === functors[16] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let makeReleasingExecutorKit,memoRace;$h‍_imports([["./src/promise-executor-kit.js", [["makeReleasingExecutorKit", [$h‍_a => (makeReleasingExecutorKit = $h‍_a)]]]],["./src/memo-race.js", [["memoRace", [$h‍_a => (memoRace = $h‍_a)]]]],["./src/is-promise.js", []],["./src/types.js", []]]);Object.defineProperty(makePromiseKit, 'name', {value: "makePromiseKit"});$h‍_once.makePromiseKit(makePromiseKit);Object.defineProperty(racePromises, 'name', {value: "racePromises"});$h‍_once.racePromises(racePromises);   
+
+
+
+
+
+
+
+
+
+
+/** @type {PromiseConstructor} */
+const BestPipelinablePromise=  globalThis.HandledPromise||  Promise;
+
+/**
+ * makePromiseKit() builds a Promise object, and returns a record
+ * containing the promise itself, as well as separate facets for resolving
+ * and rejecting it.
+ *
+ * @template T
+ * @returns {import('./src/types.js').PromiseKit<T>}
+ */
+function        makePromiseKit() {
+  const { resolve, reject, executor}=   makeReleasingExecutorKit();
+
+  const promise=  new BestPipelinablePromise(executor);
+
+  return harden({ promise, resolve, reject});
+ }
+harden(makePromiseKit);
+
+// NB: Another implementation for Promise.race would be to use the releasing executor,
+// However while it would no longer leak the raced promise objects themselves, it would
+// still leak reactions on the non-resolved promises contending for the race.
+
+/**
+ * Creates a Promise that is resolved or rejected when any of the provided Promises are resolved
+ * or rejected.
+ *
+ * Unlike `Promise.race` it cleans up after itself so a non-resolved value doesn't hold onto
+ * the result promise.
+ *
+ * @template T
+ * @param {Iterable<T>} values An iterable of Promises.
+ * @returns {Promise<Awaited<T>>} A new Promise.
+ */
+function        racePromises(values) {
+  return harden(memoRace.call(BestPipelinablePromise, values));
+ }
+harden(racePromises);
+})()
+,
+// === functors[17] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let assertChecker,checkNormalProperty;$h‍_imports([["./passStyle-helpers.js", [["assertChecker", [$h‍_a => (assertChecker = $h‍_a)]],["checkNormalProperty", [$h‍_a => (checkNormalProperty = $h‍_a)]]]]]);   
+
+
+
+const { details: X}=   assert;
+const { getPrototypeOf}=   Object;
+const { ownKeys}=   Reflect;
+const { isArray, prototype: arrayPrototype}=   Array;
+
+/**
+ * @param {unknown} candidate
+ * @param {import('./types.js').Checker} [check]
+ * @returns {boolean}
+ */
+const canBeValid=  (candidate, check=  undefined)=>
+  isArray(candidate)||
+   !!check&&  check(false, X `Array expected: ${candidate}`);
+
+/**
+ *
+ * @type {import('./internal-types.js').PassStyleHelper}
+ */
+const        CopyArrayHelper=  harden({
+  styleName: 'copyArray',
+
+  canBeValid,
+
+  assertValid: (candidate, passStyleOfRecur)=>  {
+    canBeValid(candidate, assertChecker);
+    getPrototypeOf(candidate)===  arrayPrototype||
+      assert.fail(X `Malformed array: ${candidate}`,TypeError);
+    // Since we're already ensured candidate is an array, it should not be
+    // possible for the following test to fail
+    checkNormalProperty(candidate, 'length', false, assertChecker);
+    const len=  /** @type {unknown[]} */  candidate. length;
+    for( let i=  0; i<  len; i+=  1) {
+      checkNormalProperty(candidate, i, true, assertChecker);
+     }
+    // +1 for the 'length' property itself.
+    ownKeys(candidate).length===  len+  1||
+      assert.fail(X `Arrays must not have non-indexes: ${candidate}`,TypeError);
+    // Recursively validate that each member is passable.
+    candidate.every((v)=>!!passStyleOfRecur(v));
+   }});$h‍_once.CopyArrayHelper(CopyArrayHelper);
+})()
+,
+// === functors[18] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let assertChecker,canBeMethod,checkNormalProperty;$h‍_imports([["./passStyle-helpers.js", [["assertChecker", [$h‍_a => (assertChecker = $h‍_a)]],["canBeMethod", [$h‍_a => (canBeMethod = $h‍_a)]],["checkNormalProperty", [$h‍_a => (checkNormalProperty = $h‍_a)]]]]]);   
+
+
+
+
+
+
+
+const { details: X}=   assert;
+const { ownKeys}=   Reflect;
+const { getPrototypeOf, values, prototype: objectPrototype}=   Object;
+
+/**
+ *
+ * @type {import('./internal-types.js').PassStyleHelper}
+ */
+const        CopyRecordHelper=  harden({
+  styleName: 'copyRecord',
+
+  canBeValid: (candidate, check=  undefined)=>  {
+    const reject=  !!check&&(  (details)=>check(false, details));
+    if( getPrototypeOf(candidate)!==  objectPrototype) {
+      return(
+        reject&&
+        reject(X `Records must inherit from Object.prototype: ${candidate}`));
+
+     }
+
+    return ownKeys(candidate).every((key)=>{
+      return(
+        (typeof key===  'string'||
+           !!reject&&
+            reject(
+              X `Records can only have string-named properties: ${candidate}`))&&(
+
+         !canBeMethod(candidate[key])||
+           !!reject&&
+            reject(
+              // TODO: Update message now that there is no such thing as "implicit Remotable".
+              X `Records cannot contain non-far functions because they may be methods of an implicit Remotable: ${candidate}`)));
+
+
+     });
+   },
+
+  assertValid: (candidate, passStyleOfRecur)=>  {
+    CopyRecordHelper.canBeValid(candidate, assertChecker);
+    for( const name of ownKeys(candidate)) {
+      checkNormalProperty(candidate, name, true, assertChecker);
+     }
+    // Recursively validate that each member is passable.
+    for( const val of values(candidate)) {
+      passStyleOfRecur(val);
+     }
+   }});$h‍_once.CopyRecordHelper(CopyRecordHelper);
+})()
+,
+// === functors[19] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let assertChecker,checkTagRecord,PASS_STYLE,checkNormalProperty,checkPassStyle;$h‍_imports([["./passStyle-helpers.js", [["assertChecker", [$h‍_a => (assertChecker = $h‍_a)]],["checkTagRecord", [$h‍_a => (checkTagRecord = $h‍_a)]],["PASS_STYLE", [$h‍_a => (PASS_STYLE = $h‍_a)]],["checkNormalProperty", [$h‍_a => (checkNormalProperty = $h‍_a)]],["checkPassStyle", [$h‍_a => (checkPassStyle = $h‍_a)]]]]]);   
+
+
+
+
+
+
+
+
+
+const { Fail}=   assert;
+const { ownKeys}=   Reflect;
+const { getOwnPropertyDescriptors}=   Object;
+
+/**
+ *
+ * @type {import('./internal-types.js').PassStyleHelper}
+ */
+const        TaggedHelper=  harden({
+  styleName: 'tagged',
+
+  canBeValid: (candidate, check=  undefined)=>
+    checkPassStyle(candidate, 'tagged', check),
+
+  assertValid: (candidate, passStyleOfRecur)=>  {
+    checkTagRecord(candidate, 'tagged', assertChecker);
+
+    // Typecasts needed due to https://github.com/microsoft/TypeScript/issues/1863
+    const passStyleKey=  /** @type {unknown} */  PASS_STYLE;
+    const tagKey=  /** @type {unknown} */  Symbol.toStringTag;
+    const {
+      // checkTagRecord already verified PASS_STYLE and Symbol.toStringTag own data properties.
+      [/** @type {string} */  passStyleKey]:  _passStyleDesc,
+      [/** @type {string} */  tagKey]:  _labelDesc,
+      payload: _payloadDesc, // value checked by recursive walk at the end
+      ...restDescs}=
+        getOwnPropertyDescriptors(candidate);
+    ownKeys(restDescs).length===  0||
+      Fail `Unexpected properties on tagged record ${ownKeys(restDescs)}`;
+
+    checkNormalProperty(candidate, 'payload', true, assertChecker);
+
+    // Recursively validate that each member is passable.
+    passStyleOfRecur(candidate.payload);
+   }});$h‍_once.TaggedHelper(TaggedHelper);
+})()
+,
+// === functors[20] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let isPromise,assertChecker,hasOwnPropertyOf;$h‍_imports([["@endo/promise-kit", [["isPromise", [$h‍_a => (isPromise = $h‍_a)]]]],["./passStyle-helpers.js", [["assertChecker", [$h‍_a => (assertChecker = $h‍_a)]],["hasOwnPropertyOf", [$h‍_a => (hasOwnPropertyOf = $h‍_a)]]]]]);   
+
+
+
+
+/** @typedef {import('./types.js').Checker} Checker */
+
+const { details: X, quote: q}=   assert;
+const { isFrozen, getPrototypeOf}=   Object;
+const { ownKeys}=   Reflect;
+
+/**
+ * @param {Promise} pr The value to examine
+ * @param {Checker} check
+ * @returns {pr is Promise} Whether it is a safe promise
+ */
+const checkPromiseOwnKeys=  (pr, check)=>  {
+  const reject=  (details)=>check(false, details);
+  const keys=  ownKeys(pr);
+
+  if( keys.length===  0) {
+    return true;
+   }
+
+  const unknownKeys=  keys.filter(
+    (key)=>typeof key!==  'symbol'||  !hasOwnPropertyOf(Promise.prototype, key));
+
+
+  if( unknownKeys.length!==  0) {
+    return reject(
+      X `${pr} - Must not have any own properties: ${q(unknownKeys)}`);
+
+   }
+
+  /**
+   * At the time of this writing, Node's async_hooks contains the
+   * following code, which we can also safely tolerate
+   *
+   * ```js
+   * function destroyTracking(promise, parent) {
+   * trackPromise(promise, parent);
+   *   const asyncId = promise[async_id_symbol];
+   *   const destroyed = { destroyed: false };
+   *   promise[destroyedSymbol] = destroyed;
+   *   registerDestroyHook(promise, asyncId, destroyed);
+   * }
+   * ```
+   *
+   * @param {string|symbol} key
+   */
+  const checkSafeAsyncHooksKey=  (key)=>{
+    const val=  pr[key];
+    if( val===  undefined||  typeof val===  'number') {
+      return true;
+     }
+    if(
+      typeof val===  'object'&&
+      val!==  null&&
+      isFrozen(val)&&
+      getPrototypeOf(val)===  Object.prototype)
+      {
+      const subKeys=  ownKeys(val);
+      if( subKeys.length===  0) {
+        return true;
+       }
+
+      if(
+        subKeys.length===  1&&
+        subKeys[0]===  'destroyed'&&
+        val.destroyed===  false)
+        {
+        return true;
+       }
+     }
+    return reject(
+      X `Unexpected Node async_hooks additions to promise: ${pr}.${q(
+        String(key))
+        } is ${val}`);
+
+   };
+
+  return keys.every(checkSafeAsyncHooksKey);
+ };
+
+/**
+ * Under Hardened JS a promise is "safe" if its `then` method can be called
+ * synchronously without giving the promise an opportunity for a
+ * reentrancy attack during that call.
+ *
+ * https://github.com/Agoric/agoric-sdk/issues/9
+ * raises the issue of testing that a specimen is a safe promise
+ * such that the test also does not give the specimen a
+ * reentrancy opportunity. That is well beyond the ambition here.
+ * TODO Though if we figure out a nice solution, it might be good to
+ * use it here as well.
+ *
+ * @param {unknown} pr The value to examine
+ * @param {Checker} check
+ * @returns {pr is Promise} Whether it is a safe promise
+ */
+const checkSafePromise=  (pr, check)=>  {
+  const reject=  (details)=>check(false, details);
+  return(
+    (isFrozen(pr)||  reject(X `${pr} - Must be frozen`))&&(
+     isPromise(pr)||  reject(X `${pr} - Must be a promise`))&&(
+     getPrototypeOf(pr)===  Promise.prototype||
+      reject(
+        X `${pr} - Must inherit from Promise.prototype: ${q(
+          getPrototypeOf(pr))
+          }`))&&
+
+    checkPromiseOwnKeys(/** @type {Promise} */  pr,  check));
+
+ };
+harden(checkSafePromise);
+
+/**
+ * Determine if the argument is a Promise.
+ *
+ * @param {unknown} pr The value to examine
+ * @returns {pr is Promise} Whether it is a promise
+ */
+const        isSafePromise=  (pr)=>checkSafePromise(pr, (x)=>x);$h‍_once.isSafePromise(isSafePromise);
+harden(isSafePromise);
+
+const        assertSafePromise=  (pr)=>checkSafePromise(pr, assertChecker);$h‍_once.assertSafePromise(assertSafePromise);
+})()
+,
+// === functors[21] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let isPromise,isObject,isTypedArray,PASS_STYLE,CopyArrayHelper,CopyRecordHelper,TaggedHelper,ErrorHelper,RemotableHelper,assertPassableSymbol,assertSafePromise;$h‍_imports([["@endo/promise-kit", [["isPromise", [$h‍_a => (isPromise = $h‍_a)]]]],["./passStyle-helpers.js", [["isObject", [$h‍_a => (isObject = $h‍_a)]],["isTypedArray", [$h‍_a => (isTypedArray = $h‍_a)]],["PASS_STYLE", [$h‍_a => (PASS_STYLE = $h‍_a)]]]],["./copyArray.js", [["CopyArrayHelper", [$h‍_a => (CopyArrayHelper = $h‍_a)]]]],["./copyRecord.js", [["CopyRecordHelper", [$h‍_a => (CopyRecordHelper = $h‍_a)]]]],["./tagged.js", [["TaggedHelper", [$h‍_a => (TaggedHelper = $h‍_a)]]]],["./error.js", [["ErrorHelper", [$h‍_a => (ErrorHelper = $h‍_a)]]]],["./remotable.js", [["RemotableHelper", [$h‍_a => (RemotableHelper = $h‍_a)]]]],["./symbol.js", [["assertPassableSymbol", [$h‍_a => (assertPassableSymbol = $h‍_a)]]]],["./safe-promise.js", [["assertSafePromise", [$h‍_a => (assertSafePromise = $h‍_a)]]]]]);   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/** @typedef {import('./internal-types.js').PassStyleHelper} PassStyleHelper */
+/** @typedef {import('./types.js').Passable} Passable */
+/** @typedef {import('./types.js').PassStyle} PassStyle */
+/** @typedef {import('./types.js').PassStyleOf} PassStyleOf */
+/** @typedef {import('./types.js').PrimitiveStyle} PrimitiveStyle */
+
+/** @typedef {Exclude<PassStyle, PrimitiveStyle | "promise">} HelperPassStyle */
+
+const { details: X, Fail, quote: q}=   assert;
+const { ownKeys}=   Reflect;
+const { isFrozen}=   Object;
+
+/**
+ * @param {PassStyleHelper[]} passStyleHelpers
+ * @returns {Record<HelperPassStyle, PassStyleHelper> }
+ */
+
+const makeHelperTable=  (passStyleHelpers)=>{
+  /** @type {Record<HelperPassStyle, any> & {__proto__: null}} */
+  const HelperTable=  {
+    __proto__: null,
+    copyArray: undefined,
+    copyRecord: undefined,
+    tagged: undefined,
+    error: undefined,
+    remotable: undefined};
+
+  for( const helper of passStyleHelpers) {
+    const { styleName}=   helper;
+    styleName in HelperTable||  Fail `Unrecognized helper: ${q(styleName)}`;
+    HelperTable[styleName]===  undefined||
+      Fail `conflicting helpers for ${q(styleName)}`;
+    HelperTable[styleName]=  helper;
+   }
+  for( const styleName of ownKeys(HelperTable)) {
+    HelperTable[styleName]!==  undefined||
+      Fail `missing helper for ${q(styleName)}`;
+   }
+
+  return harden(HelperTable);
+ };
+
+/**
+ * @param {PassStyleHelper[]} passStyleHelpers The passStyleHelpers to register,
+ * in priority order.
+ * NOTE These must all be "trusted",
+ * complete, and non-colliding. `makePassStyleOf` may *assume* that each helper
+ * does what it is supposed to do. `makePassStyleOf` is not trying to defend
+ * itself against malicious helpers, though it does defend against some
+ * accidents.
+ * @returns {PassStyleOf}
+ */
+const makePassStyleOf=  (passStyleHelpers)=>{
+  const HelperTable=  makeHelperTable(passStyleHelpers);
+  const remotableHelper=  HelperTable.remotable;
+
+  /**
+   * Purely for performance. However it is mutable static state, and
+   * it does have some observability on proxies. TODO need to assess
+   * whether this creates a static communications channel.
+   *
+   * passStyleOf does a full recursive walk of pass-by-copy
+   * structures, in order to validate that they are acyclic. In addition
+   * it is used by other algorithms to recursively walk these pass-by-copy
+   * structures, so without this cache, these algorithms could be
+   * O(N**2) or worse.
+   *
+   * @type {WeakMap<Passable, PassStyle>}
+   */
+  const passStyleMemo=  new WeakMap();
+
+  /**
+   * @type {PassStyleOf}
+   */
+  const passStyleOf=  (passable)=>{
+    // Even when a WeakSet is correct, when the set has a shorter lifetime
+    // than its keys, we prefer a Set due to expected implementation
+    // tradeoffs.
+    const inProgress=  new Set();
+
+    /**
+     * @type {PassStyleOf}
+     */
+    const passStyleOfRecur=  (inner)=>{
+      const innerIsObject=  isObject(inner);
+      if( innerIsObject) {
+        if( passStyleMemo.has(inner)) {
+          // @ts-ignore TypeScript doesn't know that `get` after `has` is safe
+          return passStyleMemo.get(inner);
+         }
+        !inProgress.has(inner)||
+          Fail `Pass-by-copy data cannot be cyclic ${inner}`;
+        inProgress.add(inner);
+       }
+      // eslint-disable-next-line no-use-before-define
+      const passStyle=  passStyleOfInternal(inner);
+      if( innerIsObject) {
+        passStyleMemo.set(inner, passStyle);
+        inProgress.delete(inner);
+       }
+      return passStyle;
+     };
+
+    /**
+     * @type {PassStyleOf}
+     */
+    const passStyleOfInternal=  (inner)=>{
+      const typestr=  typeof inner;
+      switch( typestr){
+        case 'undefined':
+        case 'string':
+        case 'boolean':
+        case 'number':
+        case 'bigint': {
+          return typestr;
+         }
+        case 'symbol': {
+          assertPassableSymbol(inner);
+          return 'symbol';
+         }
+        case 'object': {
+          if( inner===  null) {
+            return 'null';
+           }
+          if( !isFrozen(inner)) {
+            assert.fail(
+              // TypedArrays get special treatment in harden()
+              // and a corresponding special error message here.
+              isTypedArray(inner)?
+                  X `Cannot pass mutable typed arrays like ${inner}.`:
+                  X `Cannot pass non-frozen objects like ${inner}. Use harden()`);
+
+           }
+          if( isPromise(inner)) {
+            assertSafePromise(inner);
+            return 'promise';
+           }
+          typeof inner.then!==  'function'||
+            Fail `Cannot pass non-promise thenables`;
+          const passStyleTag=  inner[PASS_STYLE];
+          if( passStyleTag!==  undefined) {
+            assert.typeof(passStyleTag, 'string');
+            const helper=  HelperTable[passStyleTag];
+            helper!==  undefined||
+              Fail `Unrecognized PassStyle: ${q(passStyleTag)}`;
+            helper.assertValid(inner, passStyleOfRecur);
+            return (/** @type {PassStyle} */ passStyleTag);
+           }
+          for( const helper of passStyleHelpers) {
+            if( helper.canBeValid(inner)) {
+              helper.assertValid(inner, passStyleOfRecur);
+              return helper.styleName;
+             }
+           }
+          remotableHelper.assertValid(inner, passStyleOfRecur);
+          return 'remotable';
+         }
+        case 'function': {
+          isFrozen(inner)||
+            Fail `Cannot pass non-frozen objects like ${inner}. Use harden()`;
+          typeof inner.then!==  'function'||
+            Fail `Cannot pass non-promise thenables`;
+          remotableHelper.assertValid(inner, passStyleOfRecur);
+          return 'remotable';
+         }
+        default: {
+          throw assert.fail(X `Unrecognized typeof ${q(typestr)}`,TypeError);
+         }}
+
+     };
+
+    return passStyleOfRecur(passable);
+   };
+  return harden(passStyleOf);
+ };
+
+/**
+ * If there is already a `VataData` global containing a `passStyleOf`,
+ * then presumably it was endowed for us by liveslots, so we should use
+ * and export that one instead. Other software may have left it for us here,
+ * but it would require write access to our global, or the ability to
+ * provide endowments to our global, both of which seems adequate as a test of
+ * whether it is authorized to serve the same role as liveslots.
+ *
+ * NOTE HAZARD: This use by liveslots does rely on `passStyleOf` being
+ * deterministic. If it is not, then in a liveslot-like virtualized
+ * environment, it can be used to detect GC.
+ *
+ * @type {PassStyleOf}
+ */
+const        passStyleOf=
+  // UNTIL https://github.com/endojs/endo/issues/1514
+  // Prefer: globalThis?.VatData?.passStyleOf ||
+   globalThis&&  globalThis.VatData&&  globalThis.VatData.passStyleOf||
+  makePassStyleOf([
+    CopyArrayHelper,
+    CopyRecordHelper,
+    TaggedHelper,
+    ErrorHelper,
+    RemotableHelper]);$h‍_once.passStyleOf(passStyleOf);
+
+
+const        assertPassable=  (val)=>{
+  passStyleOf(val); // throws if val is not a passable
+ };$h‍_once.assertPassable(assertPassable);
+harden(assertPassable);
+})()
+,
+// === functors[22] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let PASS_STYLE,assertPassable;$h‍_imports([["./passStyle-helpers.js", [["PASS_STYLE", [$h‍_a => (PASS_STYLE = $h‍_a)]]]],["./passStyleOf.js", [["assertPassable", [$h‍_a => (assertPassable = $h‍_a)]]]]]);   
+
+
+
+
+const { create, prototype: objectPrototype}=   Object;
+const { Fail}=   assert;
+
+const        makeTagged=  (tag, payload)=>  {
+  typeof tag===  'string'||
+    Fail `The tag of a tagged record must be a string: ${tag}`;
+  assertPassable(harden(payload));
+  return harden(
+    create(objectPrototype, {
+      [PASS_STYLE]: { value: 'tagged'},
+      [Symbol.toStringTag]: { value: tag},
+      payload: { value: payload, enumerable: true}}));
+
+
+ };$h‍_once.makeTagged(makeTagged);
+harden(makeTagged);
+})()
+,
+// === functors[23] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let passStyleOf;$h‍_imports([["./passStyleOf.js", [["passStyleOf", [$h‍_a => (passStyleOf = $h‍_a)]]]]]);   
+
+/** @typedef {import('./types.js').Passable} Passable */
+/**
+ * @template {Passable} [T=Passable]
+ * @typedef {import('./types.js').CopyArray<T>} CopyArray
+ */
+/**
+ * @template {Passable} [T=Passable]
+ * @typedef {import('./types.js').CopyRecord<T>} CopyRecord
+ */
+/** @typedef {import('./types.js').RemotableObject} Remotable */
+
+const { Fail, quote: q}=   assert;
+
+/**
+ * Check whether the argument is a pass-by-copy array, AKA a "copyArray"
+ * in @endo/marshal terms
+ *
+ * @param {Passable} arr
+ * @returns {arr is CopyArray<any>}
+ */
+const isCopyArray=  (arr)=>passStyleOf(arr)===  'copyArray';$h‍_once.isCopyArray(isCopyArray);
+harden(isCopyArray);
+
+/**
+ * Check whether the argument is a pass-by-copy record, AKA a
+ * "copyRecord" in @endo/marshal terms
+ *
+ * @param {Passable} record
+ * @returns {record is CopyRecord<any>}
+ */
+const isRecord=  (record)=>passStyleOf(record)===  'copyRecord';$h‍_once.isRecord(isRecord);
+harden(isRecord);
+
+/**
+ * Check whether the argument is a remotable.
+ *
+ * @param {Passable} remotable
+ * @returns {remotable is Remotable}
+ */
+const isRemotable=  (remotable)=>passStyleOf(remotable)===  'remotable';$h‍_once.isRemotable(isRemotable);
+harden(isRemotable);
+
+/**
+ * @callback AssertArray
+ * @param {Passable} array
+ * @param {string=} optNameOfArray
+ * @returns {asserts array is CopyArray<any>}
+ */
+
+/** @type {AssertArray} */
+const assertCopyArray=  (array, optNameOfArray=  'Alleged array')=>  {
+  const passStyle=  passStyleOf(array);
+  passStyle===  'copyArray'||
+    Fail `${q(optNameOfArray)} ${array} must be a pass-by-copy array, not ${q(
+      passStyle)
+      }`;
+ };$h‍_once.assertCopyArray(assertCopyArray);
+harden(assertCopyArray);
+
+/**
+ * @callback AssertRecord
+ * @param {Passable} record
+ * @param {string=} optNameOfRecord
+ * @returns {asserts record is CopyRecord<any>}
+ */
+
+/** @type {AssertRecord} */
+const assertRecord=  (record, optNameOfRecord=  'Alleged record')=>  {
+  const passStyle=  passStyleOf(record);
+  passStyle===  'copyRecord'||
+    Fail `${q(optNameOfRecord)} ${record} must be a pass-by-copy record, not ${q(
+      passStyle)
+      }`;
+ };$h‍_once.assertRecord(assertRecord);
+harden(assertRecord);
+
+/**
+ * @callback AssertRemotable
+ * @param {Passable} remotable
+ * @param {string=} optNameOfRemotable
+ * @returns {asserts remotable is Remotable}
+ */
+
+/** @type {AssertRemotable} */
+const assertRemotable=  (
+  remotable,
+  optNameOfRemotable=  'Alleged remotable')=>
+     {
+  const passStyle=  passStyleOf(remotable);
+  passStyle===  'remotable'||
+    Fail `${q(optNameOfRemotable)} ${remotable} must be a remotable, not ${q(
+      passStyle)
+      }`;
+ };$h‍_once.assertRemotable(assertRemotable);
+harden(assertRemotable);
+})()
+,
+// === functors[24] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   
+})()
+,
+// === functors[25] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([["./src/iter-helpers.js", []],["./src/passStyle-helpers.js", []],["./src/error.js", []],["./src/remotable.js", []],["./src/symbol.js", []],["./src/passStyleOf.js", []],["./src/makeTagged.js", []],["./src/make-far.js", []],["./src/typeGuards.js", []],["./src/types.js", []]]);   
+})()
+,
+// === functors[26] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([["@endo/eventual-send", []],["@endo/pass-style", []]]);   
+})()
+,
+// === functors[27] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([]);   // @ts-check
+
+const        padding=  '=';$h‍_once.padding(padding);
+
+const        alphabet64=
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * The numeric value corresponding to each letter of the alphabet.
+ * If an alphabet is named for the Greek letters alpha and beta, then clearly a
+ * monodu is named for the corresponding Greek numbers mono and duo.
+ *
+ * @type {Record<string, number>}
+ */$h‍_once.alphabet64(alphabet64);
+const        monodu64=  {};$h‍_once.monodu64(monodu64);
+for( let i=  0; i<  alphabet64.length; i+=  1) {
+  const c=  alphabet64[i];
+  monodu64[c]=  i;
+ }
+})()
+,
+// === functors[28] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let alphabet64,padding;$h‍_imports([["./common.js", [["alphabet64", [$h‍_a => (alphabet64 = $h‍_a)]],["padding", [$h‍_a => (padding = $h‍_a)]]]]]);   
+
+
+
+
+
+/**
+ * Encodes bytes into a Base64 string, as specified in
+ * https://tools.ietf.org/html/rfc4648#section-4
+ *
+ * XSnap is a JavaScript engine based on Moddable/XS.
+ * The algorithm below is orders of magnitude too slow on this VM, but it
+ * arranges a native binding on the global object.
+ * We use that if it is available instead.
+ *
+ * @param {Uint8Array} data
+ * @returns {string} base64 encoding
+ */
+const jsEncodeBase64=  (data)=>{
+  // A cursory benchmark shows that string concatenation is about 25% faster
+  // than building an array and joining it in v8, in 2020, for strings of about
+  // 100 long.
+  let string=  '';
+  let register=  0;
+  let quantum=  0;
+
+  for( let i=  0; i<  data.length; i+=  1) {
+    const b=  data[i];
+    register=   register<<  8|   b;
+    quantum+=  8;
+    if( quantum===  24) {
+      string+=
+        alphabet64[ register>>>  18&   0x3f]+
+        alphabet64[ register>>>  12&   0x3f]+
+        alphabet64[ register>>>  6&   0x3f]+
+        alphabet64[ register>>>  0&   0x3f];
+      register=  0;
+      quantum=  0;
+     }
+   }
+
+  switch( quantum){
+    case 0:
+      break;
+    case 8:
+      string+=
+        alphabet64[ register>>>  2&   0x3f]+
+        alphabet64[ register<<  4&   0x3f]+
+        padding+
+        padding;
+      break;
+    case 16:
+      string+=
+        alphabet64[ register>>>  10&   0x3f]+
+        alphabet64[ register>>>  4&   0x3f]+
+        alphabet64[ register<<  2&   0x3f]+
+        padding;
+      break;
+    default:
+      throw Error( `internal: bad quantum ${quantum}`);}
+
+  return string;
+ };
+
+/** @type {typeof jsEncodeBase64} */
+const        encodeBase64=
+  globalThis.Base64!==  undefined?  globalThis.Base64.encode:  jsEncodeBase64;$h‍_once.encodeBase64(encodeBase64);
+})()
+,
+// === functors[29] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let monodu64,padding;$h‍_imports([["./common.js", [["monodu64", [$h‍_a => (monodu64 = $h‍_a)]],["padding", [$h‍_a => (padding = $h‍_a)]]]]]);   
+
+
+
+
+
+/**
+ * Decodes a Base64 string into bytes, as specified in
+ * https://tools.ietf.org/html/rfc4648#section-4
+ *
+ * XSnap is a JavaScript engine based on Moddable/XS.
+ * The algorithm below is orders of magnitude too slow on this VM, but it
+ * arranges a native binding on the global object.
+ * We use that if it is available instead.
+ *
+ * @param {string} string Base64-encoded string
+ * @param {string} [name] The name of the string as it will appear in error
+ * messages.
+ * @returns {Uint8Array} decoded bytes
+ */
+const jsDecodeBase64=  (string, name=  '<unknown>')=>  {
+  const data=  new Uint8Array(Math.ceil( string.length*  4/   3));
+  let register=  0;
+  let quantum=  0;
+  let i=  0; // index in string
+  let j=  0; // index in data
+
+  while( i<  string.length&&  string[i]!==  padding) {
+    const number=  monodu64[string[i]];
+    if( number===  undefined) {
+      throw Error( `Invalid base64 character ${string[i]} in string ${name}`);
+     }
+    register=   register<<  6|   number;
+    quantum+=  6;
+    if( quantum>=  8) {
+      quantum-=  8;
+      data[j]=  register>>>  quantum;
+      j+=  1;
+      register&=  (1<<  quantum)-  1;
+     }
+    i+=  1;
+   }
+
+  while( i<  string.length&&  quantum%  8!==  0) {
+    if( string[i]!==  padding) {
+      throw Error( `Missing padding at offset ${i} of string ${name}`);
+     }
+    i+=  1;
+    quantum+=  6;
+   }
+
+  if( i<  string.length) {
+    throw Error(
+       `Base64 string has trailing garbage ${string.substr(
+        i)
+        } in string ${name}`);
+
+   }
+
+  return data.subarray(0, j);
+ };
+
+// The XS Base64.decode function is faster, but might return ArrayBuffer (not
+// Uint8Array).  Adapt it to our needs.
+const adaptDecoder=
+  (nativeDecodeBase64)=>
+  (...args)=>  {
+    const decoded=  nativeDecodeBase64(...args);
+    if( decoded instanceof Uint8Array) {
+      return decoded;
+     }
+    return new Uint8Array(decoded);
+   };
+
+/** @type {typeof jsDecodeBase64} */
+const        decodeBase64=
+  globalThis.Base64!==  undefined?
+      adaptDecoder(globalThis.Base64.decode):
+      jsDecodeBase64;$h‍_once.decodeBase64(decodeBase64);
+})()
+,
+// === functors[30] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([["./src/encode.js", []]]);   
+})()
+,
+// === functors[31] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let encodeBase64;$h‍_imports([["./encode.js", [["encodeBase64", [$h‍_a => (encodeBase64 = $h‍_a)]]]]]);   
+
+/**
+ * @param {string} stringToEncode the binary string to encode
+ * @returns {string} an ASCII string containing the base64 representation of `stringToEncode`
+ */
+const        btoa=  (stringToEncode)=>{
+  const bytes=  stringToEncode.split('').map((char)=>{
+    const b=  char.charCodeAt(0);
+    if( b>  0xff) {
+      throw Error( `btoa: character out of range: ${char}`);
+     }
+    return b;
+   });
+  const buf=  new Uint8Array(bytes);
+  return encodeBase64(buf);
+ };$h‍_once.btoa(btoa);
+})()
+,
+// === functors[32] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([["./src/decode.js", []]]);   
+})()
+,
+// === functors[33] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let decodeBase64;$h‍_imports([["./decode.js", [["decodeBase64", [$h‍_a => (decodeBase64 = $h‍_a)]]]]]);   
+
+/**
+ * @param {string} encodedData a binary string containing base64-encoded data
+ * @returns {string} an ASCII string containing decoded data from `encodedData`
+ */
+const        atob=  (encodedData)=>{
+  const buf=  decodeBase64(encodedData);
+  return String.fromCharCode(...buf);
+ };$h‍_once.atob(atob);
+})()
+,
+// === functors[34] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([["./src/encode.js", []],["./src/decode.js", []],["./btoa.js", []],["./atob.js", []]]);   
+})()
+,
+// === functors[35] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let E,makePromiseKit;$h‍_imports([["@endo/eventual-send", [["E", [$h‍_a => (E = $h‍_a)]]]],["@endo/promise-kit", [["makePromiseKit", [$h‍_a => (makePromiseKit = $h‍_a)]]]]]);   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * @template T
+ * @typedef {{
+ *   resolve(value?: T | Promise<T>): void,
+ *   reject(error: Error): void,
+ *   promise: Promise<T>
+ * }} PromiseKit
+ */
+
+// TypeScript ReadOnly semantics are not sufficiently expressive to distinguish
+// a value one promises not to alter from a value one must not alter,
+// making it useless.
+const freeze=  /** @type {<T>(v: T | Readonly<T>) => T} */  Object.freeze;
+
+/**
+ * @template T
+ * @returns {import('./types.js').AsyncQueue<T>}
+ */
+const        makeQueue=  ()=>  {
+  let { promise: tailPromise, resolve: tailResolve}=   makePromiseKit();
+  return {
+    put(value) {
+      const { resolve, promise}=   makePromiseKit();
+      tailResolve(freeze({ value, promise}));
+      tailResolve=  resolve;
+     },
+    get() {
+      const promise=  tailPromise.then((next)=>next.value);
+      tailPromise=  tailPromise.then((next)=>next.promise);
+      return harden(promise);
+     }};
+
+ };$h‍_once.makeQueue(makeQueue);
+harden(makeQueue);
+
+/**
+ * @template TRead
+ * @template TWrite
+ * @template TReadReturn
+ * @template TWriteReturn
+ * @param {import('./types.js').AsyncQueue<IteratorResult<TRead, TReadReturn>>} acks
+ * @param {import('./types.js').AsyncQueue<IteratorResult<TWrite, TWriteReturn>>} data
+ */
+const        makeStream=  (acks, data)=>  {
+  const stream=  harden({
+    /**
+     * @param {TWrite} value
+     */
+    next(value) {
+      // Note the shallow freeze since value is not guaranteed to be freezable
+      // (typed arrays are not).
+      data.put(freeze({ value, done: false}));
+      return acks.get();
+     },
+    /**
+     * @param {TWriteReturn} value
+     */
+    return(value) {
+      data.put(freeze({ value, done: true}));
+      return acks.get();
+     },
+    /**
+     * @param {Error} error
+     */
+    throw(error) {
+      data.put(harden(Promise.reject(error)));
+      return acks.get();
+     },
+    [Symbol.asyncIterator]() {
+      return stream;
+     }});
+
+  return stream;
+ };$h‍_once.makeStream(makeStream);
+harden(makeStream);
+
+// JSDoc TypeScript seems unable to express this particular function's
+// entanglement of queues, but the definition in types.d.ts works for the end
+// user.
+const        makePipe=  ()=>  {
+  const data=  makeQueue();
+  const acks=  makeQueue();
+  const reader=  makeStream(acks, data);
+  const writer=  makeStream(data, acks);
+  return harden([writer, reader]);
+ };$h‍_once.makePipe(makePipe);
+harden(makePipe);
+
+/**
+ * @template TRead
+ * @template TWrite
+ * @template TReadReturn
+ * @template TWriteReturn
+ * @param {import('./types.js').Stream<TWrite, TRead, TWriteReturn, TReadReturn>} writer
+ * @param {import('./types.js').Stream<TRead, TWrite, TReadReturn, TWriteReturn>} reader
+ * @param {TWrite} primer
+ */
+const        pump=  async( writer, reader, primer)=>  {
+  /** @param {Promise<IteratorResult<TRead, TReadReturn>>} promise */
+  const tick=  (promise)=>
+    E.when(
+      promise,
+      (result)=>{
+        if( result.done) {
+          return writer.return(result.value);
+         }else {
+          // Behold: mutual recursion.
+          // eslint-disable-next-line no-use-before-define
+          return tock(writer.next(result.value));
+         }
+       },
+      (/** @type {Error} */ error)=>  {
+        return writer.throw(error);
+       });
+
+  /** @param {Promise<IteratorResult<TWrite, TWriteReturn>>} promise */
+  const tock=  (promise)=>
+    E.when(
+      promise,
+      (result)=>{
+        if( result.done) {
+          return reader.return(result.value);
+         }else {
+          return tick(reader.next(result.value));
+         }
+       },
+      (/** @type {Error} */ error)=>  {
+        return reader.throw(error);
+       });
+
+  await tick(reader.next(primer));
+  return undefined;
+ };$h‍_once.pump(pump);
+harden(pump);
+
+/**
+ * @template TRead
+ * @template TWrite
+ * @template TReturn
+ * @param {AsyncGenerator<TRead, TReturn, TWrite>} generator
+ * @param {TWrite} primer
+ */
+const        prime=  (generator, primer)=>  {
+  // We capture the first returned promise.
+  const first=  generator.next(primer);
+  /** @type {IteratorResult<TRead, TReturn>=} */
+  let result;
+  const primed=  harden({
+    /** @param {TWrite} value */
+          async next(value){
+      if( result===  undefined) {
+        result=  await first;
+        if( result.done) {
+          return result;
+         }
+       }
+      return generator.next(value);
+     },
+    /** @param {TReturn} value */
+          async return(value){
+      if( result===  undefined) {
+        result=  await first;
+        if( result.done) {
+          return result;
+         }
+       }
+      return generator.return(value);
+     },
+    /** @param {Error} error */
+          async throw(error){
+      if( result===  undefined) {
+        result=  await first;
+        if( result.done) {
+          throw error;
+         }
+       }
+      return generator.throw(error);
+     }});
+
+  return primed;
+ };$h‍_once.prime(prime);
+harden(prime);
+
+/**
+ * @template TIn
+ * @template TOut
+ * @param {import('./types.js').Reader<TIn>} reader
+ * @param {(value: TIn) => TOut} transform
+ * @returns {import('./types.js').Reader<TOut>}
+ */
+const        mapReader=  (reader, transform)=>  {
+  async function* transformGenerator() {
+    for await( const value of reader) {
+      yield transform(value);
+     }
+    return undefined;
+   }
+  return harden(transformGenerator());
+ };$h‍_once.mapReader(mapReader);
+harden(mapReader);
+
+/**
+ * @template TIn
+ * @template TOut
+ * @param {import('./types.js').Writer<TOut>} writer
+ * @param {(value: TIn) => TOut} transform
+ * @returns {import('./types.js').Writer<TIn>}
+ */
+const        mapWriter=  (writer, transform)=>  {
+  const transformedWriter=  harden({
+    /**
+     * @param {TIn} value
+     */
+          async next(value){
+      return writer.next(transform(value));
+     },
+    /**
+     * @param {Error} error
+     */
+          async throw(error){
+      return writer.throw(error);
+     },
+    /**
+     * @param {undefined} value
+     */
+          async return(value){
+      return writer.return(value);
+     },
+    [Symbol.asyncIterator]() {
+      return transformedWriter;
+     }});
+
+  return transformedWriter;
+ };$h‍_once.mapWriter(mapWriter);
+harden(mapWriter);
+})()
+,
+// === functors[36] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let decodeBase64,mapReader,E;$h‍_imports([["@endo/base64", [["decodeBase64", [$h‍_a => (decodeBase64 = $h‍_a)]]]],["@endo/stream", [["mapReader", [$h‍_a => (mapReader = $h‍_a)]]]],["@endo/far", [["E", [$h‍_a => (E = $h‍_a)]]]]]);   
+
+
+
+
+
+/**
+ * @template TValue
+ * @template TReturn
+ * @template TNext
+ * @param {import('@endo/far').ERef<AsyncIterator<TValue, TReturn, TNext>>} iteratorRef
+ */
+const        makeRefIterator=  (iteratorRef)=>{
+  const iterator=  {
+    /** @param {[] | [TNext]} args */
+    next: async( ...args)=>  E(iteratorRef).next(...args),
+    /** @param {[] | [TReturn]} args */
+    return: async( ...args)=>  E(iteratorRef).return(...args),
+    /** @param {any} error */
+    throw: async(error)=> E(iteratorRef).throw(error),
+    [Symbol.asyncIterator]: ()=>  iterator};
+
+  return iterator;
+ };
+
+/**
+ * @param {import('@endo/far').ERef<AsyncIterator<string>>} readerRef
+ * @returns {AsyncIterableIterator<Uint8Array, any>}
+ */$h‍_once.makeRefIterator(makeRefIterator);
+const        makeRefReader=  (readerRef)=>
+  mapReader(makeRefIterator(readerRef), decodeBase64);$h‍_once.makeRefReader(makeRefReader);
+})()
+,
+// === functors[37] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   $h‍_imports([["./src/ref-reader.js", []]]);   
+})()
+,
+// === functors[38] ===
+({   imports: $h‍_imports,   liveVar: $h‍_live,   onceVar: $h‍_once,   importMeta: $h‍____meta, }) => (function () {   let E,makeRefIterator;$h‍_imports([["@endo/far", [["E", [$h‍_a => (E = $h‍_a)]]]],["@endo/daemon/ref-reader.js", [["makeRefIterator", [$h‍_a => (makeRefIterator = $h‍_a)]]]]]);   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+const dateFormatter=  new window.Intl.DateTimeFormat(undefined, {
+  dateStyle: 'full',
+  timeStyle: 'long'});
+
+
+const followMessagesComponent=  async( $parent, $end, powers)=>  {
+  for await( const message of makeRefIterator(E(powers).followMessages())) {
+    const { number, who, when, dismissed}=   message;
+
+    const $error=  document.createElement('span');
+    $error.style.color=  'red';
+    $error.innerText=  '';
+    // To be inserted later, but declared here for reference.
+
+    const $message=  document.createElement('div');
+    $parent.insertBefore($message, $end);
+
+    dismissed.then(()=>  {
+      $message.remove();
+     });
+
+    const $number=  document.createElement('span');
+    $number.innerText=   `${number}. `;
+    $message.appendChild($number);
+
+    const $who=  document.createElement('b');
+    $who.innerText=   `${who}:`;
+    $message.appendChild($who);
+
+    if( message.type===  'request') {
+      const { what, settled}=   message;
+
+      const $what=  document.createElement('span');
+      $what.innerText=   ` ${what} `;
+      $message.appendChild($what);
+
+      const $when=  document.createElement('i');
+      $when.innerText=  dateFormatter.format(Date.parse(when));
+      $message.appendChild($when);
+
+      const $input=  document.createElement('span');
+      $message.appendChild($input);
+
+      const $pet=  document.createElement('input');
+      $input.appendChild($pet);
+
+      const $resolve=  document.createElement('button');
+      $resolve.innerText=  'resolve';
+      $input.appendChild($resolve);
+
+      const $reject=  document.createElement('button');
+      $reject.innerText=  'reject';
+      $reject.onclick=  ()=>  {
+        E(powers).reject(number, $pet.value).catch(window.reportError);
+       };
+      $input.appendChild($reject);
+
+      $resolve.onclick=  ()=>  {
+        E(powers).
+           resolve(number, $pet.value).
+           catch((error)=>{
+            $error.innerText=   ` ${error.message}`;
+           });
+       };
+
+      settled.then((status)=>{
+        $input.innerText=   ` ${status} `;
+       });
+     }else if( message.type===  'package') {
+      const { strings, names}=   message;
+      assert(Array.isArray(strings));
+      assert(Array.isArray(names));
+
+      $message.appendChild(document.createTextNode(' "'));
+
+      let index=  0;
+      for(
+        index=  0;
+        index<  Math.min(strings.length, names.length);
+        index+=  1)
+        {
+        assert.typeof(strings[index], 'string');
+        const outer=  JSON.stringify(strings[index]);
+        const inner=  outer.slice(1, outer.length-  1);
+        $message.appendChild(document.createTextNode(inner));
+        assert.typeof(names[index], 'string');
+        const name=   `@${names[index]}`;
+        const $name=  document.createElement('b');
+        $name.innerText=  name;
+        $message.appendChild($name);
+       }
+      if( strings.length>  names.length) {
+        const outer=  JSON.stringify(strings[index]);
+        const inner=  outer.slice(1, outer.length-  1);
+        $message.appendChild(document.createTextNode(inner));
+       }
+
+      $message.appendChild(document.createTextNode('" '));
+
+      const $when=  document.createElement('i');
+      $when.innerText=  dateFormatter.format(Date.parse(when));
+      $message.appendChild($when);
+
+      $message.appendChild(document.createTextNode(' '));
+
+      if( names.length>  0) {
+        const $names=  document.createElement('select');
+        $message.appendChild($names);
+        for( const name of names) {
+          const $name=  document.createElement('option');
+          $name.innerText=  name;
+          $names.appendChild($name);
+         }
+
+        $message.appendChild(document.createTextNode(' '));
+
+        const $as=  document.createElement('input');
+        $as.type=  'text';
+        $message.appendChild($as);
+
+        $message.appendChild(document.createTextNode(' '));
+
+        const $adopt=  document.createElement('button');
+        $adopt.innerText=  'Adopt';
+        $message.appendChild($adopt);
+        $adopt.onclick=  ()=>  {
+          console.log($as.value, $as);
+          E(powers).
+             adopt(number, $names.value, $as.value||  $names.value).
+             then(
+              ()=>  {
+                $as.value=  '';
+               },
+              (error)=>{
+                $error.innerText=   ` ${error.message}`;
+               });
+
+         };
+       }
+     }
+
+    $message.appendChild(document.createTextNode(' '));
+
+    const $dismiss=  document.createElement('button');
+    $dismiss.innerText=  'Dismiss';
+    $message.appendChild($dismiss);
+    $dismiss.onclick=  ()=>  {
+      E(powers).
+         dismiss(number).
+         catch((error)=>{
+          $error.innerText=   ` ${error.message}`;
+         });
+     };
+
+    $message.appendChild($error);
+   }
+ };
+
+const followNamesComponent=  async( $parent, $end, powers)=>  {
+  const $title=  document.createElement('h2');
+  $title.innerText=  'Inventory';
+  $parent.insertBefore($title, $end);
+
+  const $ul=  document.createElement('ul');
+  $parent.insertBefore($ul, $end);
+
+  const $names=  new Map();
+  for await( const change of makeRefIterator(E(powers).followNames())) {
+    if( 'add'in  change) {
+      const name=  change.add;
+
+      const $li=  document.createElement('li');
+      $ul.appendChild($li);
+
+      const $name=  document.createTextNode( `${name} `);
+      $li.appendChild($name);
+      $name.innerText=  change.add;
+
+      const $remove=  document.createElement('button');
+      $li.appendChild($remove);
+      $remove.innerText=  'Remove';
+      $remove.onclick=  ()=>  E(powers).remove(name).catch(window.reportError);
+
+      $names.set(name, $li);
+     }else if( 'remove'in  change) {
+      const $li=  $names.get(change.remove);
+      if( $li!==  undefined) {
+        $li.remove();
+        $names.delete(change.remove);
+       }
+     }
+   }
+ };
+
+const bodyComponent=  ($parent, powers)=>  {
+  const $title=  document.createElement('h1');
+  $title.innerText=  '🐈‍⬛';
+  $parent.appendChild($title);
+
+  const $endOfMessages=  document.createTextNode('');
+  $parent.appendChild($endOfMessages);
+  followMessagesComponent($parent, $endOfMessages, powers).catch(
+    window.reportError);
+
+
+  const $endOfNames=  document.createTextNode('');
+  $parent.appendChild($endOfNames);
+  followNamesComponent($parent, $endOfNames, powers).catch(window.reportError);
+ };
+
+const        make=  async(powers)=> {
+  document.body.innerHTML=  '';
+  bodyComponent(document.body, powers);
+ };$h‍_once.make(make);
+})()
+,
+]; // functors end
+
+  const cell = (name, value = undefined) => {
+    const observers = [];
+    return Object.freeze({
+      get: Object.freeze(() => {
+        return value;
+      }),
+      set: Object.freeze((newValue) => {
+        value = newValue;
+        for (const observe of observers) {
+          observe(value);
+        }
+      }),
+      observe: Object.freeze((observe) => {
+        observers.push(observe);
+        observe(value);
+      }),
+      enumerable: true,
+    });
+  };
+
+  const cells = [
+    {
+      makeEnvironmentCaptor: cell("makeEnvironmentCaptor"),
+    },
+    {
+    },
+    {
+      trackTurns: cell("trackTurns"),
+    },
+    {
+      default: cell("default"),
+    },
+    {
+    },
+    {
+      HandledPromise: cell("HandledPromise"),
+      E: cell("E"),
+    },
+    {
+      hasOwnPropertyOf: cell("hasOwnPropertyOf"),
+      isObject: cell("isObject"),
+      isTypedArray: cell("isTypedArray"),
+      PASS_STYLE: cell("PASS_STYLE"),
+      canBeMethod: cell("canBeMethod"),
+      assertChecker: cell("assertChecker"),
+      checkNormalProperty: cell("checkNormalProperty"),
+      getTag: cell("getTag"),
+      checkPassStyle: cell("checkPassStyle"),
+      checkTagRecord: cell("checkTagRecord"),
+      checkFunctionTagRecord: cell("checkFunctionTagRecord"),
+    },
+    {
+      assertIface: cell("assertIface"),
+      getInterfaceOf: cell("getInterfaceOf"),
+      RemotableHelper: cell("RemotableHelper"),
+    },
+    {
+      Remotable: cell("Remotable"),
+      Far: cell("Far"),
+      ToFarFunction: cell("ToFarFunction"),
+    },
+    {
+      mapIterable: cell("mapIterable"),
+      filterIterable: cell("filterIterable"),
+    },
+    {
+      getErrorConstructor: cell("getErrorConstructor"),
+      isErrorLike: cell("isErrorLike"),
+      ErrorHelper: cell("ErrorHelper"),
+      toPassableError: cell("toPassableError"),
+    },
+    {
+      isPassableSymbol: cell("isPassableSymbol"),
+      assertPassableSymbol: cell("assertPassableSymbol"),
+      nameForPassableSymbol: cell("nameForPassableSymbol"),
+      passableSymbolForName: cell("passableSymbolForName"),
+    },
+    {
+      makeReleasingExecutorKit: cell("makeReleasingExecutorKit"),
+    },
+    {
+      memoRace: cell("memoRace"),
+    },
+    {
+      isPromise: cell("isPromise"),
+    },
+    {
+    },
+    {
+      makePromiseKit: cell("makePromiseKit"),
+      racePromises: cell("racePromises"),
+    },
+    {
+      CopyArrayHelper: cell("CopyArrayHelper"),
+    },
+    {
+      CopyRecordHelper: cell("CopyRecordHelper"),
+    },
+    {
+      TaggedHelper: cell("TaggedHelper"),
+    },
+    {
+      isSafePromise: cell("isSafePromise"),
+      assertSafePromise: cell("assertSafePromise"),
+    },
+    {
+      passStyleOf: cell("passStyleOf"),
+      assertPassable: cell("assertPassable"),
+    },
+    {
+      makeTagged: cell("makeTagged"),
+    },
+    {
+      isCopyArray: cell("isCopyArray"),
+      isRecord: cell("isRecord"),
+      isRemotable: cell("isRemotable"),
+      assertCopyArray: cell("assertCopyArray"),
+      assertRecord: cell("assertRecord"),
+      assertRemotable: cell("assertRemotable"),
+    },
+    {
+    },
+    {
+      mapIterable: cell("mapIterable"),
+      filterIterable: cell("filterIterable"),
+      PASS_STYLE: cell("PASS_STYLE"),
+      isObject: cell("isObject"),
+      assertChecker: cell("assertChecker"),
+      getTag: cell("getTag"),
+      hasOwnPropertyOf: cell("hasOwnPropertyOf"),
+      getErrorConstructor: cell("getErrorConstructor"),
+      toPassableError: cell("toPassableError"),
+      isErrorLike: cell("isErrorLike"),
+      getInterfaceOf: cell("getInterfaceOf"),
+      assertPassableSymbol: cell("assertPassableSymbol"),
+      isPassableSymbol: cell("isPassableSymbol"),
+      nameForPassableSymbol: cell("nameForPassableSymbol"),
+      passableSymbolForName: cell("passableSymbolForName"),
+      passStyleOf: cell("passStyleOf"),
+      assertPassable: cell("assertPassable"),
+      makeTagged: cell("makeTagged"),
+      Remotable: cell("Remotable"),
+      Far: cell("Far"),
+      ToFarFunction: cell("ToFarFunction"),
+      assertRecord: cell("assertRecord"),
+      assertCopyArray: cell("assertCopyArray"),
+      assertRemotable: cell("assertRemotable"),
+      isRemotable: cell("isRemotable"),
+      isRecord: cell("isRecord"),
+      isCopyArray: cell("isCopyArray"),
+    },
+    {
+      E: cell("E"),
+      Far: cell("Far"),
+      getInterfaceOf: cell("getInterfaceOf"),
+      passStyleOf: cell("passStyleOf"),
+    },
+    {
+      padding: cell("padding"),
+      alphabet64: cell("alphabet64"),
+      monodu64: cell("monodu64"),
+    },
+    {
+      encodeBase64: cell("encodeBase64"),
+    },
+    {
+      decodeBase64: cell("decodeBase64"),
+    },
+    {
+      encodeBase64: cell("encodeBase64"),
+    },
+    {
+      btoa: cell("btoa"),
+    },
+    {
+      decodeBase64: cell("decodeBase64"),
+    },
+    {
+      atob: cell("atob"),
+    },
+    {
+      encodeBase64: cell("encodeBase64"),
+      decodeBase64: cell("decodeBase64"),
+      btoa: cell("btoa"),
+      atob: cell("atob"),
+    },
+    {
+      makeQueue: cell("makeQueue"),
+      makeStream: cell("makeStream"),
+      makePipe: cell("makePipe"),
+      pump: cell("pump"),
+      prime: cell("prime"),
+      mapReader: cell("mapReader"),
+      mapWriter: cell("mapWriter"),
+    },
+    {
+      makeRefIterator: cell("makeRefIterator"),
+      makeRefReader: cell("makeRefReader"),
+    },
+    {
+    },
+    {
+      make: cell("make"),
+    },
+  ];
+
+  Object.defineProperties(cells[1], Object.getOwnPropertyDescriptors(cells[0]));
+  Object.defineProperties(cells[5], Object.getOwnPropertyDescriptors(cells[4]));
+  Object.defineProperties(cells[16], Object.getOwnPropertyDescriptors(cells[14]));
+  Object.defineProperties(cells[16], Object.getOwnPropertyDescriptors(cells[15]));
+  Object.defineProperties(cells[25], Object.getOwnPropertyDescriptors(cells[24]));
+
+  Object.defineProperties(cells[25], {"mapIterable": { value: cells[9]["mapIterable"] },"filterIterable": { value: cells[9]["filterIterable"] },"PASS_STYLE": { value: cells[6]["PASS_STYLE"] },"isObject": { value: cells[6]["isObject"] },"assertChecker": { value: cells[6]["assertChecker"] },"getTag": { value: cells[6]["getTag"] },"hasOwnPropertyOf": { value: cells[6]["hasOwnPropertyOf"] },"getErrorConstructor": { value: cells[10]["getErrorConstructor"] },"toPassableError": { value: cells[10]["toPassableError"] },"isErrorLike": { value: cells[10]["isErrorLike"] },"getInterfaceOf": { value: cells[7]["getInterfaceOf"] },"assertPassableSymbol": { value: cells[11]["assertPassableSymbol"] },"isPassableSymbol": { value: cells[11]["isPassableSymbol"] },"nameForPassableSymbol": { value: cells[11]["nameForPassableSymbol"] },"passableSymbolForName": { value: cells[11]["passableSymbolForName"] },"passStyleOf": { value: cells[21]["passStyleOf"] },"assertPassable": { value: cells[21]["assertPassable"] },"makeTagged": { value: cells[22]["makeTagged"] },"Remotable": { value: cells[8]["Remotable"] },"Far": { value: cells[8]["Far"] },"ToFarFunction": { value: cells[8]["ToFarFunction"] },"assertRecord": { value: cells[23]["assertRecord"] },"assertCopyArray": { value: cells[23]["assertCopyArray"] },"assertRemotable": { value: cells[23]["assertRemotable"] },"isRemotable": { value: cells[23]["isRemotable"] },"isRecord": { value: cells[23]["isRecord"] },"isCopyArray": { value: cells[23]["isCopyArray"] } });
+
+  Object.defineProperties(cells[26], {"E": { value: cells[5]["E"] },"Far": { value: cells[25]["Far"] },"getInterfaceOf": { value: cells[25]["getInterfaceOf"] },"passStyleOf": { value: cells[25]["passStyleOf"] } });
+
+  Object.defineProperties(cells[30], {"encodeBase64": { value: cells[28]["encodeBase64"] } });
+
+  Object.defineProperties(cells[32], {"decodeBase64": { value: cells[29]["decodeBase64"] } });
+
+  Object.defineProperties(cells[34], {"encodeBase64": { value: cells[28]["encodeBase64"] },"decodeBase64": { value: cells[29]["decodeBase64"] },"btoa": { value: cells[31]["btoa"] },"atob": { value: cells[33]["atob"] } });
+  Object.defineProperties(cells[37], Object.getOwnPropertyDescriptors(cells[36]));
+
+  const namespaces = cells.map(cells => Object.freeze(Object.create(null, cells)));
+
+  for (let index = 0; index < namespaces.length; index += 1) {
+    cells[index]['*'] = cell('*', namespaces[index]);
+  }
+
+function observeImports(map, importName, importIndex) {
+  for (const [name, observers] of map.get(importName)) {
+    const cell = cells[importIndex][name];
+    if (cell === undefined) {
+      throw new ReferenceError(`Cannot import name ${name}`);
+    }
+    for (const observer of observers) {
+      cell.observe(observer);
+    }
+  }
+}
+
+
+  functors[0]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      makeEnvironmentCaptor: cells[0].makeEnvironmentCaptor.set,
+    },
+    importMeta: {},
+  });
+  functors[1]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./src/env-options.js", 0);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[2]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "@endo/env-options", 1);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      trackTurns: cells[2].trackTurns.set,
+    },
+    importMeta: {},
+  });
+  functors[3]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./track-turns.js", 2);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      default: cells[3].default.set,
+    },
+    importMeta: {},
+  });
+  functors[4]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[5]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./E.js", 3);
+      observeImports(map, "./exports.js", 4);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      hp: cells[5].HandledPromise.set,
+      E: cells[5].E.set,
+    },
+    importMeta: {},
+  });
+  functors[6]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      hasOwnPropertyOf: cells[6].hasOwnPropertyOf.set,
+      isObject: cells[6].isObject.set,
+      isTypedArray: cells[6].isTypedArray.set,
+      PASS_STYLE: cells[6].PASS_STYLE.set,
+      canBeMethod: cells[6].canBeMethod.set,
+      assertChecker: cells[6].assertChecker.set,
+      checkNormalProperty: cells[6].checkNormalProperty.set,
+      getTag: cells[6].getTag.set,
+      checkPassStyle: cells[6].checkPassStyle.set,
+      checkTagRecord: cells[6].checkTagRecord.set,
+      checkFunctionTagRecord: cells[6].checkFunctionTagRecord.set,
+    },
+    importMeta: {},
+  });
+  functors[7]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyle-helpers.js", 6);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      assertIface: cells[7].assertIface.set,
+      getInterfaceOf: cells[7].getInterfaceOf.set,
+      RemotableHelper: cells[7].RemotableHelper.set,
+    },
+    importMeta: {},
+  });
+  functors[8]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyle-helpers.js", 6);
+      observeImports(map, "./remotable.js", 7);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      Remotable: cells[8].Remotable.set,
+      Far: cells[8].Far.set,
+      ToFarFunction: cells[8].ToFarFunction.set,
+    },
+    importMeta: {},
+  });
+  functors[9]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./make-far.js", 8);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      mapIterable: cells[9].mapIterable.set,
+      filterIterable: cells[9].filterIterable.set,
+    },
+    importMeta: {},
+  });
+  functors[10]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyle-helpers.js", 6);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      getErrorConstructor: cells[10].getErrorConstructor.set,
+      isErrorLike: cells[10].isErrorLike.set,
+      ErrorHelper: cells[10].ErrorHelper.set,
+      toPassableError: cells[10].toPassableError.set,
+    },
+    importMeta: {},
+  });
+  functors[11]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      isPassableSymbol: cells[11].isPassableSymbol.set,
+      assertPassableSymbol: cells[11].assertPassableSymbol.set,
+      nameForPassableSymbol: cells[11].nameForPassableSymbol.set,
+      passableSymbolForName: cells[11].passableSymbolForName.set,
+    },
+    importMeta: {},
+  });
+  functors[12]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      makeReleasingExecutorKit: cells[12].makeReleasingExecutorKit.set,
+    },
+    importMeta: {},
+  });
+  functors[13]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      race: cells[13].memoRace.set,
+    },
+    importMeta: {},
+  });
+  functors[14]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      isPromise: cells[14].isPromise.set,
+    },
+    importMeta: {},
+  });
+  functors[15]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[16]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./src/promise-executor-kit.js", 12);
+      observeImports(map, "./src/memo-race.js", 13);
+      observeImports(map, "./src/is-promise.js", 14);
+      observeImports(map, "./src/types.js", 15);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      makePromiseKit: cells[16].makePromiseKit.set,
+      racePromises: cells[16].racePromises.set,
+    },
+    importMeta: {},
+  });
+  functors[17]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyle-helpers.js", 6);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      CopyArrayHelper: cells[17].CopyArrayHelper.set,
+    },
+    importMeta: {},
+  });
+  functors[18]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyle-helpers.js", 6);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      CopyRecordHelper: cells[18].CopyRecordHelper.set,
+    },
+    importMeta: {},
+  });
+  functors[19]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyle-helpers.js", 6);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      TaggedHelper: cells[19].TaggedHelper.set,
+    },
+    importMeta: {},
+  });
+  functors[20]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "@endo/promise-kit", 16);
+      observeImports(map, "./passStyle-helpers.js", 6);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      isSafePromise: cells[20].isSafePromise.set,
+      assertSafePromise: cells[20].assertSafePromise.set,
+    },
+    importMeta: {},
+  });
+  functors[21]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "@endo/promise-kit", 16);
+      observeImports(map, "./passStyle-helpers.js", 6);
+      observeImports(map, "./copyArray.js", 17);
+      observeImports(map, "./copyRecord.js", 18);
+      observeImports(map, "./tagged.js", 19);
+      observeImports(map, "./error.js", 10);
+      observeImports(map, "./remotable.js", 7);
+      observeImports(map, "./symbol.js", 11);
+      observeImports(map, "./safe-promise.js", 20);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      passStyleOf: cells[21].passStyleOf.set,
+      assertPassable: cells[21].assertPassable.set,
+    },
+    importMeta: {},
+  });
+  functors[22]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyle-helpers.js", 6);
+      observeImports(map, "./passStyleOf.js", 21);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      makeTagged: cells[22].makeTagged.set,
+    },
+    importMeta: {},
+  });
+  functors[23]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./passStyleOf.js", 21);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      isCopyArray: cells[23].isCopyArray.set,
+      isRecord: cells[23].isRecord.set,
+      isRemotable: cells[23].isRemotable.set,
+      assertCopyArray: cells[23].assertCopyArray.set,
+      assertRecord: cells[23].assertRecord.set,
+      assertRemotable: cells[23].assertRemotable.set,
+    },
+    importMeta: {},
+  });
+  functors[24]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[25]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./src/iter-helpers.js", 9);
+      observeImports(map, "./src/passStyle-helpers.js", 6);
+      observeImports(map, "./src/error.js", 10);
+      observeImports(map, "./src/remotable.js", 7);
+      observeImports(map, "./src/symbol.js", 11);
+      observeImports(map, "./src/passStyleOf.js", 21);
+      observeImports(map, "./src/makeTagged.js", 22);
+      observeImports(map, "./src/make-far.js", 8);
+      observeImports(map, "./src/typeGuards.js", 23);
+      observeImports(map, "./src/types.js", 24);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[26]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "@endo/eventual-send", 5);
+      observeImports(map, "@endo/pass-style", 25);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[27]({
+    imports(entries) {
+      const map = new Map(entries);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      padding: cells[27].padding.set,
+      alphabet64: cells[27].alphabet64.set,
+      monodu64: cells[27].monodu64.set,
+    },
+    importMeta: {},
+  });
+  functors[28]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./common.js", 27);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      encodeBase64: cells[28].encodeBase64.set,
+    },
+    importMeta: {},
+  });
+  functors[29]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./common.js", 27);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      decodeBase64: cells[29].decodeBase64.set,
+    },
+    importMeta: {},
+  });
+  functors[30]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./src/encode.js", 28);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[31]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./encode.js", 30);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      btoa: cells[31].btoa.set,
+    },
+    importMeta: {},
+  });
+  functors[32]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./src/decode.js", 29);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[33]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./decode.js", 32);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      atob: cells[33].atob.set,
+    },
+    importMeta: {},
+  });
+  functors[34]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./src/encode.js", 28);
+      observeImports(map, "./src/decode.js", 29);
+      observeImports(map, "./btoa.js", 31);
+      observeImports(map, "./atob.js", 33);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[35]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "@endo/eventual-send", 5);
+      observeImports(map, "@endo/promise-kit", 16);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      makeQueue: cells[35].makeQueue.set,
+      makeStream: cells[35].makeStream.set,
+      makePipe: cells[35].makePipe.set,
+      pump: cells[35].pump.set,
+      prime: cells[35].prime.set,
+      mapReader: cells[35].mapReader.set,
+      mapWriter: cells[35].mapWriter.set,
+    },
+    importMeta: {},
+  });
+  functors[36]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "@endo/base64", 34);
+      observeImports(map, "@endo/stream", 35);
+      observeImports(map, "@endo/far", 26);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      makeRefIterator: cells[36].makeRefIterator.set,
+      makeRefReader: cells[36].makeRefReader.set,
+    },
+    importMeta: {},
+  });
+  functors[37]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "./src/ref-reader.js", 36);
+    },
+    liveVar: {
+    },
+    onceVar: {
+    },
+    importMeta: {},
+  });
+  functors[38]({
+    imports(entries) {
+      const map = new Map(entries);
+      observeImports(map, "@endo/far", 26);
+      observeImports(map, "@endo/daemon/ref-reader.js", 37);
+    },
+    liveVar: {
+    },
+    onceVar: {
+      make: cells[38].make.set,
+    },
+    importMeta: {},
+  });
+
+  return cells[cells.length - 1]['*'].get();
+})());

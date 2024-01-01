@@ -24,12 +24,19 @@ export type UsePostMessage = {
 };
 
 export const usePostMessage = (
-  eventHandler?: MessageEventHandler
+  eventHandler?: MessageEventHandler,
+  iframeRef?: React.RefObject<HTMLIFrameElement>
 ): UsePostMessage => {
   const onWatchMessageEventHandler = useCallback(
     (event: MessageEvent) => {
       // tslint:disable-next-line: @typescript-eslint/no-unsafe-assignment
       const { origin, source } = event;
+      // If iframeRef is provided, only process messages from that iframe's source
+      if (iframeRef) {
+        if (iframeRef.current?.contentWindow !== source) {
+          return;
+        }
+      }
       const sendToSender = (returnData: MessageEvent["data"]): void => {
         postMessage(returnData, source, origin);
       };

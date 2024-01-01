@@ -49,7 +49,7 @@ type FileManagerProps = {
   skipFsWatcher?: boolean;
   skipSorting?: boolean;
   url: string;
-  useNewFolderIcon?: boolean;
+  hasNewFolderIcon?: boolean;
   view: FileManagerViewNames;
 };
 
@@ -68,7 +68,7 @@ const FileManager: FC<FileManagerProps> = ({
   skipFsWatcher,
   skipSorting,
   url,
-  useNewFolderIcon,
+  hasNewFolderIcon,
   view,
 }) => {
   const [currentUrl, setCurrentUrl] = useState(url);
@@ -91,7 +91,7 @@ const FileManager: FC<FileManagerProps> = ({
   const StyledFileManager = StyledIconFileManager;
 
   const { isSelecting, selectionRect, selectionStyling, selectionEvents } =
-    useSelection(fileManagerRef);
+    useSelection(fileManagerRef, focusedEntries, focusFunctions);
   const draggableEntry = useDraggableEntries(
     focusedEntries,
     focusFunctions,
@@ -230,7 +230,7 @@ const FileManager: FC<FileManagerProps> = ({
                 selectionRect={selectionRect}
                 setRenaming={setRenaming}
                 stats={files[file]}
-                useNewFolderIcon={useNewFolderIcon}
+                hasNewFolderIcon={hasNewFolderIcon}
                 view={view}
               />
             </StyledFileEntry>

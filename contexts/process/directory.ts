@@ -102,6 +102,16 @@ const directory: Processes = {
     icon: "/System/Icons/chromium.webp",
     title: "Endo Sandboxed App",
   },
+  Ocaps: {
+    Component: dynamic(() => import("components/apps/Ocaps")),
+    backgroundColor: "#FFF",
+    defaultSize: {
+      height: 480,
+      width: 640,
+    },
+    icon: "/System/Icons/chromium.webp",
+    title: "Endo Ocaps Sandboxed App",
+  },
   FileExplorer: {
     Component: dynamic(() => import("components/apps/FileExplorer")),
     backgroundColor: "rgba(32, 32, 32, 0.5)",

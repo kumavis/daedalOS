@@ -34,13 +34,17 @@ const defaultRuntime = `{
   console.dir = createLogger('dir');
 }`;
 
-export const defaultRuntimeConfig = {
+export type RuntimeConfig = {
+  libs: string[];
+  runtime: string;
+  transformInputSource?: (source: string) => string;
+};
+
+export const defaultRuntimeConfig: RuntimeConfig = {
   libs: [] as string[],
   runtime: defaultRuntime,
   transformInputSource: (source: string): string => source,
 };
-
-export type RuntimeConfig = typeof defaultRuntimeConfig;
 
 interface NoodjsProps extends ComponentProcessProps {
   onMessage?: MessageEventHandler;
@@ -52,15 +56,16 @@ const Browser: FC<NoodjsProps> = ({
   runtimeConfig = defaultRuntimeConfig,
   onMessage,
 }) => {
-  usePostMessage(onMessage);
   const {
     icon: setIcon,
     processes: { [id]: process },
   } = useProcesses();
-  const initialUrl = process.url || "";
+  const { transformInputSource = (source) => source } = runtimeConfig;
+  const initialUrl = process?.url || "";
   const { history, position } = useHistory(initialUrl, id);
   const { exists, readFile } = useFileSystem();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  usePostMessage(onMessage, iframeRef);
   const [loading, setLoading] = useState(false);
   const [srcDoc, setSrcDoc] = useState("");
   const [currentUrl, setCurrentUrl] = useState("");
@@ -73,7 +78,7 @@ const Browser: FC<NoodjsProps> = ({
         setSrcDoc("");
         if (isValid) {
           const fileSrc = (await readFile(addressInput)).toString();
-          const srcToRun = runtimeConfig.transformInputSource(fileSrc);
+          const srcToRun = transformInputSource(fileSrc);
           const runtimeSrc = runtimeConfig.runtime;
           const libsSrc = Array.prototype.map
             .call(runtimeConfig.libs, (libSrc: string) => {
@@ -86,8 +91,8 @@ const Browser: FC<NoodjsProps> = ({
             ${libsSrc}
             </head>
             <body></body>
-            <script>${runtimeSrc}</script>
-            <script>${srcToRun}</script>
+            <script>${escapeForScriptTag(runtimeSrc)}</script>
+            <script>${escapeForScriptTag(srcToRun)}</script>
           </html>`;
           setSrcDoc(wrapped);
         }
@@ -134,3 +139,7 @@ const Browser: FC<NoodjsProps> = ({
 };
 
 export default Browser;
+
+function escapeForScriptTag(str: string): string {
+  return str.replace(/<\/script>/gi, "<\\/script>");
+}

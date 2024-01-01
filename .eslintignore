@@ -7,3 +7,5 @@ public
 scripts
 test-results
 *.config.js
+
+components/apps/Ocaps/dist

@@ -21,7 +21,8 @@ const StyledWindow = styled(motion.section)<StyledWindowProps>`
 
   @font-face {
     font-family: "ChicagoRegular";
-    src: url("./System/Fonts/bitchicago12-webfont.eot?iefix") format("eot"),
+    src:
+      url("./System/Fonts/bitchicago12-webfont.eot?iefix") format("eot"),
       url("./System/Fonts/bitchicago12-webfont.woff") format("woff"),
       url("./System/Fonts/bitchicago12-webfont.ttf") format("truetype"),
       url("./System/Fonts/bitchicago12-webfont.svg#webfontvbCjnPDX")
